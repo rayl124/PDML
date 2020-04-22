@@ -6,7 +6,7 @@ using namespace std;
 int main(void) {
   double const m = 1.0;
   double const q = 1.0;
-  double const omega_p = 1.0/(1.0*2.0*M_PI);
+  double const omega_p = 2.0*M_PI/5.0;
 
   // Size of time history
   int n = 256;
