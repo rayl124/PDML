@@ -63,7 +63,7 @@ int main(void) {
     // Leapfrog method
     E = -(m/q)*pow(omega_p, 2.0)*x_LF[i-1];
     v_LF[i] = v_LF[i-1] + (q/m)*E*dt;
-    x_LF[i] = x_LF[i-1] + v_LF[i];
+    x_LF[i] = x_LF[i-1] + v_LF[i]*dt;
 
     MyFile << t[i] << " " << t_half[i] << " " << x_Exact[i] << " " << v_Exact[i] << " ";
     MyFile << x_FD[i] << " " << v_FD[i] << " " << x_LF[i] << " " << v_LF[i];
