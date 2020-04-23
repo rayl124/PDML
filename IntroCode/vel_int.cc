@@ -9,75 +9,88 @@ int main(void) {
   double const omega_p = 2.0*M_PI/5.0;
 
   // Size of time history
-  int n = 256;
-  double *t = new double[n];
-  double *t_half = new double[n];
-  double *x_FD = new double[n];
-  double *x_LF = new double[n];
-  double *x_Exact = new double[n];
-  double *v_FD = new double[n];
-  double *v_LF = new double[n];
-  double *v_Exact = new double[n];
+  int n = 512;
+  double t;
+  double x_FD_n1;
+  double x_FD_n;
+  double x_LF_n1;
+  double x_LF_n;
+  double x_Exact;
 
-  double E;
-  
+  double v_FD_n1;
+  double v_FD_n;
+  double v_LF_n1;
+  double v_LF_n;
+  double v_Exact;
+ 
   double t_end = 25.0;
   double dt = t_end/(n-1);
 
+  double resid_FD_x = 0.0;
+  double resid_FD_v = 0.0;
+  double resid_LF_x = 0.0;
+  double resid_LF_v = 0.0;
+
   // Boundary conditions
-  x_Exact[0] = 1.0;
-  x_FD[0] = 1.0;
-  x_LF[0] = 1.0;
+  x_Exact = 1.0;
+  x_FD_n = 1.0;
+  x_LF_n = 1.0;
   
-  v_Exact[0] = 0.0;
-  v_FD[0] = 0.0;
-
-  E = -(m/q)*pow(omega_p, 2.0)*x_LF[0];
-  v_LF[0] = 0.0 - 0.5*(q/m)*E*dt;
+  v_Exact= 0.0;
+  v_FD_n = 0.0;
+  v_LF_n = 0.0 + 0.5*pow(omega_p, 2.0)*x_LF_n*dt;
   
-  t[0] = 0.0;
-  t_half[0] = -0.5*dt;
-
+  t = 0.0;
 
   ofstream MyFile("vel_int.txt");
-  MyFile << "Time Time_0.5 x_Exact v_Exact x_FD v_FD x_LF v_LF" << std::endl;
-  MyFile << t[0] << " " << t_half[0] << " " << x_Exact[0] << " " << v_Exact[0] << " ";
-  MyFile << x_FD[0] << " " << v_FD[0] << " " << x_LF[0] << " " << v_LF[0];
+  MyFile << "Time x_Exact v_Exact x_FD v_FD x_LF v_LF" << std::endl;
+  MyFile << t << " " << x_Exact << " " << v_Exact << " ";
+  MyFile << x_FD_n << " " << v_FD_n << " " << x_LF_n << " " << v_LF_n;
   MyFile << std::endl;
 
   // Time vector and exact solution
   for (int i = 1; i < n; ++i){
     // Time Vectors
-    t[i] = i*dt;
-    t_half[i] = t[i] - 0.5*dt;
+    t = t+dt;
 
     // Exact solutions
-    x_Exact[i] = cos(omega_p * t[i]);
-    v_Exact[i] = -omega_p * sin(omega_p*t[i]);
+    x_Exact = cos(omega_p * t);
+    v_Exact = -omega_p * sin(omega_p*t);
 
     // Forward difference
-    E = -(m/q)*pow(omega_p, 2.0)*x_FD[i-1];
-    v_FD[i] = v_FD[i-1] + q/m*E*dt;
-    x_FD[i] = x_FD[i-1] + v_FD[i-1]*dt;
+    v_FD_n1 = v_FD_n - pow(omega_p, 2.0)*x_FD_n*dt;
+    x_FD_n1 = x_FD_n + v_FD_n*dt;
 
     // Leapfrog method
-    E = -(m/q)*pow(omega_p, 2.0)*x_LF[i-1];
-    v_LF[i] = v_LF[i-1] + (q/m)*E*dt;
-    x_LF[i] = x_LF[i-1] + v_LF[i]*dt;
+    v_LF_n1 = v_LF_n - pow(omega_p, 2.0)*x_LF_n*dt;
+    x_LF_n1 = x_LF_n + v_LF_n1*dt;
 
-    MyFile << t[i] << " " << t_half[i] << " " << x_Exact[i] << " " << v_Exact[i] << " ";
-    MyFile << x_FD[i] << " " << v_FD[i] << " " << x_LF[i] << " " << v_LF[i];
+    // x_n+1 becomes x_n, v_n+1 becomes v_n
+    x_FD_n = x_FD_n1;
+    v_FD_n = v_FD_n1;
+    x_LF_n = x_LF_n1;
+    v_LF_n = v_LF_n1;
+
+    // Error Calculation
+    resid_FD_x += (x_FD_n-x_Exact)*(x_FD_n-x_Exact);
+    resid_FD_v += (v_FD_n-v_Exact)*(v_FD_n-v_Exact);
+    resid_LF_x += (x_LF_n-x_Exact)*(x_LF_n-x_Exact);
+    resid_LF_v += (v_LF_n-v_Exact)*(v_LF_n-v_Exact);
+
+
+    MyFile << t << " " << x_Exact << " " << v_Exact << " ";
+    MyFile << x_FD_n << " " << v_FD_n << " " << x_LF_n << " " << v_LF_n;
     MyFile << std::endl;
   }
 
-  delete t;
-  delete t_half;
-  delete x_FD;  
-  delete x_LF;   
-  delete x_Exact;   
-  delete v_FD; 
-  delete v_LF;
-  delete v_Exact;
+  resid_FD_x = sqrt(resid_FD_x);
+  resid_FD_v = sqrt(resid_FD_v);
+  resid_LF_x = sqrt(resid_LF_x);
+  resid_LF_v = sqrt(resid_LF_v);
+  
+  MyFile << resid_FD_x << " " << resid_FD_v << " " << resid_LF_x << " ";
+  MyFile << resid_LF_v << std::endl;
+  MyFile.close();
 
   return 0;
 }
