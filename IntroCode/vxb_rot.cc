@@ -43,33 +43,33 @@ int main(void) {
   double det = 1.0/(1.0 + epsilon2); // det(I-Repsilon)
 
   // Boundaries
-  x_FD_n[0] = 0.0;
-  x_FD_n[1] = -r_L;
-  x_TI_n[0] = 0.0;
-  x_TI_n[1] = -r_L;
-  x_TE_n[0] = 0.0;
-  x_TE_n[1] = -r_L;
-  x_B_n[0] = 0.0;
-  x_B_n[1] = -r_L;
+  x_FD_n[0] = r_L;
+  x_FD_n[1] = 0.0;
+  x_TI_n[0] = r_L;
+  x_TI_n[1] = 0.0;
+  x_TE_n[0] = r_L;
+  x_TE_n[1] = 0.0;
+  x_B_n[0] = r_L;
+  x_B_n[1] = 0.0;
 
-  v_FD_n[0] = v_tan;
-  v_FD_n[1] = 0.0;
+  v_FD_n[0] = 0.0;
+  v_FD_n[1] = v_tan;
 
   // Shift by half a time step
-  v_TI_n[0] = v_tan; // v_tan + (q/m)*B*0.0*dt;
-  v_TI_n[1] = 0.0 - 0.5*(q/m)*B*v_tan*dt;
+  v_TI_n[0] = 0.0 - 0.5*(q/m)*B*v_tan*dt;
+  v_TI_n[1] = v_tan;
 
-  v_TE_n[0] = v_tan;
-  v_TE_n[1] = 0.0 - 0.5*(q/m)*B*v_tan*dt;
- 
-  v_B_minus[0] = v_tan;
-  v_B_minus[1] = 0.0 - 0.5*(q/m)*B*v_tan*dt;
+  v_TE_n[0] = 0.0 - 0.5*(q/m)*B*v_tan*dt;
+  v_TE_n[1] = v_tan;
 
-  x_Exact[0] = 0.0;
-  x_Exact[1] = -r_L;
+  v_B_minus[0] = 0.0 - 0.5*(q/m)*B*v_tan*dt;
+  v_B_minus[1] = v_tan;
+
+  x_Exact[0] = r_L;
+  x_Exact[1] = 0.0;
   
   ofstream MyFile("vxb_rot.txt");
-  MyFile << "Time x_Exact y_Exact x_FD y_FD x_TI y_TI" << std::endl;
+  MyFile << "Time x_Exact y_Exact x_FD y_FD x_TI y_TI x_TE y_TE x_B y_B" << std::endl;
 
   MyFile << 0.0 << " " << x_Exact[0] << " " <<  x_Exact[1] << " " << x_FD_n[0];
   MyFile << " " << x_FD_n[1] << " " << x_TI_n[0] << " " <<  x_TI_n[1];
@@ -81,8 +81,8 @@ int main(void) {
     t += dt;
 
     // Exact solution
-    x_Exact[0] = m*v_tan/(q*B)*sin(omega_c*t);
-    x_Exact[1] = m*v_tan/(q*B)*cos(omega_c*t);
+    x_Exact[0] = -m*v_tan/(q*B)*cos(omega_c*t);
+    x_Exact[1] = m*v_tan/(q*B)*sin(omega_c*t);
     
 
     // Forward difference
