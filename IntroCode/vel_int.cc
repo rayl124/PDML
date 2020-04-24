@@ -27,6 +27,9 @@ void run_sims(int n,
   double v_LF_n1;
   double v_LF_n;
   double v_Exact;
+
+  double x_norm = 1.0;
+  double v_norm = 0.0;
  
   double t_end = 25.0;
   double dt = t_end/(n-1);
@@ -85,6 +88,8 @@ void run_sims(int n,
     (*resid_FD_v) += (v_FD_n-v_Exact)*(v_FD_n-v_Exact);
     (*resid_LF_x) += (x_LF_n-x_Exact)*(x_LF_n-x_Exact);
     (*resid_LF_v) += (v_LF_n-v_Exact)*(v_LF_n-v_Exact);
+    x_norm += x_Exact*x_Exact;
+    v_norm += v_Exact*v_Exact;
 
     // Write file for finest mesh
     if (n == n_max) {
@@ -98,14 +103,14 @@ void run_sims(int n,
     MyFileData.close();
   }
 
-  *resid_FD_x = sqrt(*resid_FD_x);
-  *resid_FD_v = sqrt(*resid_FD_v);
-  *resid_LF_x = sqrt(*resid_LF_x);
-  *resid_LF_v = sqrt(*resid_LF_v);
+  *resid_FD_x = sqrt(*resid_FD_x)/sqrt(x_norm);
+  *resid_FD_v = sqrt(*resid_FD_v)/sqrt(v_norm);
+  *resid_LF_x = sqrt(*resid_LF_x)/sqrt(x_norm);
+  *resid_LF_v = sqrt(*resid_LF_v)/sqrt(v_norm);
 }
 
 int main(void) {
-  int n_max = 2048;
+  int n_max = 1024;
   double resid_FD_x;
   double resid_FD_v;
   double resid_LF_x;

@@ -17,6 +17,8 @@ void run_sims(int N,
 
   double t = 0.0;
   double *x_Exact = new double[2];
+  double x_norm_exact = 0.0;
+  double y_norm_exact = 0.0;
 
   // Index 0 = x direction, index 1 = y direction
   double *x_FD_n = new double[2]; // Forward difference
@@ -88,7 +90,9 @@ void run_sims(int N,
   *resid_B_x = 0.0;
   *resid_B_y = 0.0;
  
-  
+  x_norm_exact = pow(x_Exact[0], 2.0);
+  y_norm_exact = pow(x_Exact[1], 2.0);
+
   ofstream MyFile("vxb_rot.txt");
 
   // Write for finest mesh
@@ -174,6 +178,10 @@ void run_sims(int N,
     *resid_B_x += pow(x_Exact[0] - x_B_n[0], 2.0);
     *resid_B_y += pow(x_Exact[1] - x_B_n[1], 2.0);
 
+    x_norm_exact += pow(x_Exact[0], 2.0);
+    y_norm_exact += pow(x_Exact[1], 2.0);
+
+
     // Write for finest mesh
     if (N == n_max) {
       MyFile << t << " " << x_Exact[0] << " " <<  x_Exact[1] << " " << x_FD_n[0];
@@ -186,14 +194,14 @@ void run_sims(int N,
   MyFile.close();
 
   // Calculate error
-  *resid_FD_x = sqrt(*resid_FD_x);
-  *resid_FD_y = sqrt(*resid_FD_y);
-  *resid_TI_x = sqrt(*resid_TI_x);
-  *resid_TI_y = sqrt(*resid_TI_y);
-  *resid_TE_x = sqrt(*resid_TE_x);
-  *resid_TE_y = sqrt(*resid_TE_y);
-  *resid_B_x = sqrt(*resid_B_x);
-  *resid_B_y = sqrt(*resid_B_y);
+  *resid_FD_x = sqrt(*resid_FD_x)/sqrt(x_norm_exact);
+  *resid_FD_y = sqrt(*resid_FD_y)/sqrt(y_norm_exact);
+  *resid_TI_x = sqrt(*resid_TI_x)/sqrt(x_norm_exact);
+  *resid_TI_y = sqrt(*resid_TI_y)/sqrt(y_norm_exact);
+  *resid_TE_x = sqrt(*resid_TE_x)/sqrt(x_norm_exact);
+  *resid_TE_y = sqrt(*resid_TE_y)/sqrt(y_norm_exact);
+  *resid_B_x = sqrt(*resid_B_x)/sqrt(x_norm_exact);
+  *resid_B_y = sqrt(*resid_B_y)/sqrt(y_norm_exact);
 
   delete x_Exact;
   delete x_FD_n1;
@@ -217,7 +225,7 @@ void run_sims(int N,
 }
 
 int main(void) {
-  double n_max = 2048;
+  double n_max = 1024;
   double resid_FD_x, resid_FD_y, resid_TI_x, resid_TI_y;
   double resid_TE_x, resid_TE_y, resid_B_x, resid_B_y;
 
