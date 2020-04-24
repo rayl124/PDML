@@ -2,10 +2,20 @@
 #include <iostream>
 #include <fstream>
 using namespace std;
-int main(void) {
-  int N = 512;
 
-  double t;
+void run_sims(int N,
+		int n_max,
+		double *resid_FD_x,
+		double *resid_FD_y,
+		double *resid_TI_x,
+		double *resid_TI_y,
+		double *resid_TE_x,
+		double *resid_TE_y,
+		double *resid_B_x,
+		double *resid_B_y) {
+  //int N = 512;
+
+  double t = 0.0;
   double *x_Exact = new double[2];
 
   // Index 0 = x direction, index 1 = y direction
@@ -67,15 +77,30 @@ int main(void) {
 
   x_Exact[0] = r_L;
   x_Exact[1] = 0.0;
+
+  // Initialize errors
+  *resid_FD_x = 0.0;
+  *resid_FD_y = 0.0;
+  *resid_TI_x = 0.0;
+  *resid_TI_y = 0.0;
+  *resid_TE_x = 0.0;
+  *resid_TE_y = 0.0;
+  *resid_B_x = 0.0;
+  *resid_B_y = 0.0;
+ 
   
   ofstream MyFile("vxb_rot.txt");
-  MyFile << "Time x_Exact y_Exact x_FD y_FD x_TI y_TI x_TE y_TE x_B y_B" << std::endl;
 
-  MyFile << 0.0 << " " << x_Exact[0] << " " <<  x_Exact[1] << " " << x_FD_n[0];
-  MyFile << " " << x_FD_n[1] << " " << x_TI_n[0] << " " <<  x_TI_n[1];
-  MyFile << " " << x_TE_n[0] << " " << x_TE_n[1] << " " << x_B_n[0] << " " << x_B_n[1];
+  // Write for finest mesh
+  if (N == n_max) {
+    MyFile << "Time x_Exact y_Exact x_FD y_FD x_TI y_TI x_TE y_TE x_B y_B" << std::endl;
 
-  MyFile << std::endl;
+    MyFile << 0.0 << " " << x_Exact[0] << " " <<  x_Exact[1] << " " << x_FD_n[0];
+    MyFile << " " << x_FD_n[1] << " " << x_TI_n[0] << " " <<  x_TI_n[1];
+    MyFile << " " << x_TE_n[0] << " " << x_TE_n[1] << " " << x_B_n[0] << " " << x_B_n[1];
+
+    MyFile << std::endl;
+  }
 
   for(int i = 1; i < N; ++i) {
     t += dt;
@@ -139,14 +164,36 @@ int main(void) {
     v_B_minus[0] = v_B_plus[0];
     v_B_minus[1] = v_B_plus[1];
 
+    // Calculate Error
+    *resid_FD_x += pow(x_Exact[0] - x_FD_n[0], 2.0);
+    *resid_FD_y += pow(x_Exact[1] - x_FD_n[1], 2.0);
+    *resid_TI_x += pow(x_Exact[0] - x_TI_n[0], 2.0);
+    *resid_TI_y += pow(x_Exact[1] - x_TI_n[1], 2.0);
+    *resid_TE_x += pow(x_Exact[0] - x_TE_n[0], 2.0);
+    *resid_TE_y += pow(x_Exact[1] - x_TE_n[1], 2.0);
+    *resid_B_x += pow(x_Exact[0] - x_B_n[0], 2.0);
+    *resid_B_y += pow(x_Exact[1] - x_B_n[1], 2.0);
 
-    MyFile << t << " " << x_Exact[0] << " " <<  x_Exact[1] << " " << x_FD_n[0];
-    MyFile << " " << x_FD_n[1] << " " << x_TI_n[0] << " " <<  x_TI_n[1];
-    MyFile << " " << x_TE_n[0] << " " << x_TE_n[1] << " " << x_B_n[0] << " " << x_B_n[1];
-    MyFile << std::endl;
+    // Write for finest mesh
+    if (N == n_max) {
+      MyFile << t << " " << x_Exact[0] << " " <<  x_Exact[1] << " " << x_FD_n[0];
+      MyFile << " " << x_FD_n[1] << " " << x_TI_n[0] << " " <<  x_TI_n[1];
+      MyFile << " " << x_TE_n[0] << " " << x_TE_n[1] << " " << x_B_n[0] << " " << x_B_n[1];
+      MyFile << std::endl;
+    }
   }
 
   MyFile.close();
+
+  // Calculate error
+  *resid_FD_x = sqrt(*resid_FD_x);
+  *resid_FD_y = sqrt(*resid_FD_y);
+  *resid_TI_x = sqrt(*resid_TI_x);
+  *resid_TI_y = sqrt(*resid_TI_y);
+  *resid_TE_x = sqrt(*resid_TE_x);
+  *resid_TE_y = sqrt(*resid_TE_y);
+  *resid_B_x = sqrt(*resid_B_x);
+  *resid_B_y = sqrt(*resid_B_y);
 
   delete x_Exact;
   delete x_FD_n1;
@@ -167,7 +214,31 @@ int main(void) {
   delete v_B_plus;
   delete v_prime;
   delete v_B_minus;
+}
+
+int main(void) {
+  double n_max = 2048;
+  double resid_FD_x, resid_FD_y, resid_TI_x, resid_TI_y;
+  double resid_TE_x, resid_TE_y, resid_B_x, resid_B_y;
+
+
+  ofstream ErrorFile("vxb_rot_resid.txt");
+ 
+  ErrorFile << "n x_FD y_FD x_TI y_TI x_TE y_TE x_B y_B" << std::endl; 
+  
+  for (int n = 64; n < n_max + 1; n *= 2) {
+    run_sims(n, n_max, &resid_FD_x, &resid_FD_y,
+		&resid_TI_x, &resid_TI_y, &resid_TE_x,
+		&resid_TE_y, &resid_B_x, &resid_B_y);
+
+    ErrorFile << n << " " << resid_FD_x << " " <<  resid_FD_y << " " << resid_TI_x;
+    ErrorFile << " " << resid_TI_y << " " << resid_TE_x << " " <<  resid_TE_y;
+    ErrorFile << " " << resid_B_x << " " << resid_B_y;
+    ErrorFile << std::endl;
+
+  }
+ 
+  ErrorFile.close();
 
   return 0;
 }
-
