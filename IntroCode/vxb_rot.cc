@@ -102,8 +102,8 @@ int main(void) {
     x_TI_n1[1] = x_TI_n[1] + v_TI_n1[1]*dt;
 
     // Tajima Explicit
-    v_TE_n1[0] = v_TE_n[0] + epsilon*v_TE_n[1];
-    v_TE_n1[1] = -epsilon*v_TE_n[0] + v_TE_n[1];
+    v_TE_n1[0] = v_TE_n[0] + 2*epsilon*v_TE_n[1];
+    v_TE_n1[1] = -2*epsilon*v_TE_n[0] + v_TE_n[1];
 
     x_TE_n1[0] = x_TE_n[0] + v_TE_n1[0]*dt;
     x_TE_n1[1] = x_TE_n[1] + v_TE_n1[1]*dt;
