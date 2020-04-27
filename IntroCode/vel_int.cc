@@ -27,9 +27,11 @@ void run_sims(int n,
   double v_LF_n1;
   double v_LF_n;
   double v_Exact;
+  double v_Exact_half;
 
   double x_norm = 1.0;
   double v_norm = 0.0;
+  double v_norm_half = 0.0;
  
   double t_end = 25.0;
   double dt = t_end/(n-1);
@@ -45,6 +47,8 @@ void run_sims(int n,
   x_LF_n = 1.0;
   
   v_Exact= 0.0;
+  v_Exact_half = -omega_p * sin(omega_p*(-0.5*dt));
+
   v_FD_n = 0.0;
   v_LF_n = 0.0 + 0.5*pow(omega_p, 2.0)*x_LF_n*dt;
   
@@ -68,6 +72,8 @@ void run_sims(int n,
     // Exact solutions
     x_Exact = cos(omega_p * t);
     v_Exact = -omega_p * sin(omega_p*t);
+    // For leapfrog error calculation
+    v_Exact_half = -omega_p * sin(omega_p*(t-0.5*dt));
 
     // Forward difference
     v_FD_n1 = v_FD_n - pow(omega_p, 2.0)*x_FD_n*dt;
@@ -87,9 +93,10 @@ void run_sims(int n,
     (*resid_FD_x) += (x_FD_n-x_Exact)*(x_FD_n-x_Exact);
     (*resid_FD_v) += (v_FD_n-v_Exact)*(v_FD_n-v_Exact);
     (*resid_LF_x) += (x_LF_n-x_Exact)*(x_LF_n-x_Exact);
-    (*resid_LF_v) += (v_LF_n-v_Exact)*(v_LF_n-v_Exact);
+    (*resid_LF_v) += (v_LF_n-v_Exact_half)*(v_LF_n-v_Exact_half);
     x_norm += x_Exact*x_Exact;
     v_norm += v_Exact*v_Exact;
+    v_norm_half += v_Exact_half*v_Exact_half;
 
     // Write file for finest mesh
     if (n == n_max) {
@@ -106,7 +113,7 @@ void run_sims(int n,
   *resid_FD_x = sqrt(*resid_FD_x)/sqrt(x_norm);
   *resid_FD_v = sqrt(*resid_FD_v)/sqrt(v_norm);
   *resid_LF_x = sqrt(*resid_LF_x)/sqrt(x_norm);
-  *resid_LF_v = sqrt(*resid_LF_v)/sqrt(v_norm);
+  *resid_LF_v = sqrt(*resid_LF_v)/sqrt(v_norm_half);
 }
 
 int main(void) {
