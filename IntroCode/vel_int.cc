@@ -58,8 +58,8 @@ void run_sims(int n,
   
   // Write file for finest mesh
   if (n == n_max) {
-    MyFileData << "Time x_Exact v_Exact x_FD v_FD x_LF v_LF" << std::endl;
-    MyFileData << t << " " << x_Exact << " " << v_Exact << " ";
+    MyFileData << "Time x_Exact v_Exact v_Exact_half x_FD v_FD x_LF v_LF" << std::endl;
+    MyFileData << t << " " << x_Exact << " " << v_Exact << " " << v_Exact_half << " ";
     MyFileData << x_FD_n << " " << v_FD_n << " " << x_LF_n << " " << v_LF_n;
     MyFileData << std::endl;
   }
@@ -100,7 +100,7 @@ void run_sims(int n,
 
     // Write file for finest mesh
     if (n == n_max) {
-      MyFileData << t << " " << x_Exact << " " << v_Exact << " ";
+      MyFileData << t << " " << x_Exact << " " << v_Exact << " " << v_Exact_half << " ";
       MyFileData << x_FD_n << " " << v_FD_n << " " << x_LF_n << " " << v_LF_n;
       MyFileData << std::endl;
     }
