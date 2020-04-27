@@ -49,7 +49,7 @@ void run_sims(int N,
   double omega_c = q*B/m; // Cyclotron frequency rad/s
 
   double t_end = 8*2*M_PI/abs(omega_c); // 5 periods
-  double dt = t_end/(N-1.0);
+  double dt = t_end/(N);
   double epsilon = omega_c*dt/(2.0); // Scaling factor
   double epsilon2 = epsilon*epsilon; // Epsilon^2
   double det = 1.0/(1.0 + epsilon2); // det(I-Repsilon)
@@ -106,7 +106,7 @@ void run_sims(int N,
     MyFile << std::endl;
   }
 
-  for(int i = 1; i < N; ++i) {
+  for(int i = 1; i < N + 1; ++i) {
     t += dt;
 
     // Exact solution

@@ -34,7 +34,7 @@ void run_sims(int n,
   double v_norm_half = 0.0;
  
   double t_end = 25.0;
-  double dt = t_end/(n-1);
+  double dt = t_end/(n);
 
   *resid_FD_x = 0.0;
   *resid_FD_v = 0.0;
@@ -65,7 +65,7 @@ void run_sims(int n,
   }
 
   // Time vector and exact solution
-  for (int i = 1; i < n; ++i){
+  for (int i = 1; i < n + 1; ++i){
     // Time Vectors
     t = t+dt;
 
