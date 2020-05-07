@@ -302,7 +302,7 @@ int main(void) {
   }
  
   // Output files
-  ofstream DataFile("Results/ES_PIC_Initial.txt");
+  ofstream DataFile("Results/ESFieldData.txt");
   ofstream ParticleFile("Results/ParticleInfo.txt");
   ofstream NumFile("Results/NumParticles.txt");
 
