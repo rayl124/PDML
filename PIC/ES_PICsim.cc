@@ -1,7 +1,10 @@
 #include <iostream>
 #include <math.h>
 #include <algorithm>
-#include <time.h>
+#include <ctime>
+#include <fstream>
+#include <cstdlib>
+
 
 using namespace std;
 
@@ -29,8 +32,8 @@ void get_Weights(double *part_x,
   
     node_index[0] = floor(part_x[0]/dh);
     node_index[1] = floor(part_x[1]/dh);
-    double hx = part_x[0] - (node_index[0])*dh;
-    double hy = part_x[1] - (node_index[1])*dh;
+    double hx = (part_x[0] - (node_index[0])*dh)/dh;
+    double hy = (part_x[1] - (node_index[1])*dh)/dh;
 
     weights[0] = (1.0-hx)*(1.0-hy);
     weights[1] = hx*(1.0-hy);
@@ -163,6 +166,14 @@ void jacobi_Update(double *phi,
     phi_new[ij_to_index(nx1-2, 1, nx2)] = (phi[ij_to_index(nx1-3, 1, nx2)]/(dx1*dx1) +
 		  			  phi[ij_to_index(nx1-2, 2, nx2)]/(dx2*dx2))*scale;
 
+    phi_new[ij_to_index(nx1-1, nx2-2, nx2)] = phi_new[ij_to_index(nx1-2, nx2-2, nx2)];
+    phi_new[ij_to_index(nx1-2, nx2-1, nx2)] = phi_new[ij_to_index(nx1-2, nx2-2, nx2)];
+    phi_new[ij_to_index(nx1-1, nx2-1, nx2)] = phi_new[ij_to_index(nx1-2, nx2-2, nx2)];
+    phi_new[ij_to_index(nx1-1, 1, nx2)] = phi_new[ij_to_index(nx1-2, 1, nx2)];
+    phi_new[ij_to_index(nx1-2, 0, nx2)] = phi_new[ij_to_index(nx1-2, 1, nx2)];
+    phi_new[ij_to_index(nx1-1, 0, nx2)] = phi_new[ij_to_index(nx1-2, 1, nx2)];
+
+
     // Calculate the residual
     for (int i = 0; i < nx1; ++i) {
       for (int j = 0; j < nx2; ++j) {
@@ -179,7 +190,7 @@ void jacobi_Update(double *phi,
       break;
     }
     if (jacobi_iter == jacobi_max_iter) {
-      std::cout << "Jacobi could not converge" << std::endl;
+      cout << "Jacobi could not converge" << endl;
     }
   }
   delete(phi_new);
@@ -200,6 +211,7 @@ void LeapFrog(double *part_x,
 ////////////////////////////////////////////////////////////////////////
 
 int main(void) {
+
   // Constants
   const double epsilon0 = 8.854e-12; // Permittivity of free space
   const double q = 1.602e-19; // Elementary charge [C]
@@ -270,6 +282,7 @@ int main(void) {
 
   // Move Particles
   double *E_part = new double[2];
+  srand(time(NULL));
   
   // Set up phi boundaries and initial values
   double *phi = new double[nn];
@@ -277,7 +290,6 @@ int main(void) {
   for (int i = 0; i < nx1; ++i) {
     for (int j = 0; j < nx2; ++j) {
       index_ij = ij_to_index(i, j, nx2);
-      rho[index_ij] = 0.0;
       
       if (i >= box_range[0] && i <= box_range[1] && 
           j >= box_range[2] && j <= box_range[3]) {
@@ -288,13 +300,25 @@ int main(void) {
       }
     }
   }
+ 
+  // Output files
+  ofstream DataFile("Results/ES_PIC_Initial.txt");
+  ofstream ParticleFile("Results/ParticleInfo.txt");
 
+  DataFile << "Iteration / Ion Density / Electric Potential / Electric Field x1 / ";
+  DataFile << "Electric Field x2 / Number of Macroparticles" << std::endl;
 
   // Main Loop
   for (int iter = 0; iter < ts; ++iter) {     
+    // Reset variables
+    for (int i = 0; i<nn; ++i) {
+      rho[i] = 0.0;
+      E_field[i] = 0.0;
+      RHS[i] = 0.0;
+    }
     
-    std::cout << "Iter: " << iter << std::endl;
-    std::cout << "Computing ion charge density..." << std::endl;
+    cout << "Iter: " << iter << endl;
+    cout << "Computing ion charge density..." << endl;
     //Compute ion charge density 
     
     ///////////////////////////
@@ -449,19 +473,32 @@ int main(void) {
     std::cout << "Adding new particles..." <<std::endl;
     // Generate particles
     for (int new_p = 0; new_p < np_insert; ++new_p) {
-      x_part[2*(np + new_p)] = dh*(rand()/RAND_MAX);
-      x_part[2*(np + new_p) + 1] = Lx2*(rand()/RAND_MAX);
+      x_part[2*(np + new_p)] = dh*(double(rand())/RAND_MAX);
+      x_part[2*(np + new_p) + 1] = Lx2*(double(rand())/RAND_MAX);
 
-      v_part[2*(np + new_p)] = v_drift + 0.5*(rand()/RAND_MAX
-		               + rand()/RAND_MAX + rand()/RAND_MAX
+      v_part[2*(np + new_p)] = v_drift + (double(rand())/RAND_MAX
+		     		 + double(rand())/RAND_MAX  
+			         + double(rand())/RAND_MAX 
 			       - 1.5)*vth;
-      v_part[2*(np + new_p) + 1] = 0.5*(rand()/RAND_MAX + 
-		      rand()/RAND_MAX + rand()/RAND_MAX - 1.5)*vth;
+      v_part[2*(np + new_p) + 1] = 0.5*(double(rand())/RAND_MAX
+		      + double(rand())/RAND_MAX + double(rand())/RAND_MAX
+		      - 1.5)*vth;
     }
     np += np_insert;
 
     std::cout << "End of iteration, np = " << np << std::endl << std::endl;
+    
     // Output info
+    if (iter == 2) {
+      for (int i = 0; i < nn; ++i) {
+        DataFile << rho[i] << " " << phi[i] << " " << E_field[2*i] << " ";
+	DataFile << E_field[2*i + 1] << std::endl;
+      }
+      for (int i = 0; i < np; ++i) {
+        ParticleFile <<x_part[2*i] << " " << x_part[2*i + 1] << " " << v_part[2*i] << " " ;
+	ParticleFile << v_part[2*i+1] << std::endl;
+      }
+    }
     
   }
   delete(box_range);
