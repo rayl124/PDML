@@ -314,7 +314,7 @@ int main(void) {
 
   NumFile << "Iteration / Number of Macroparticles" << endl;
   // Main Loop
-  for (int iter = 0; iter < ts + 1; ++iter) {     
+  for (int iter = 0; iter < ts; ++iter) {     
     // Reset variables
     for (int i = 0; i<nn; ++i) {
       rho[i] = 0.0;
@@ -463,8 +463,8 @@ int main(void) {
       if (x_part[2*p] < 0 ||
 	  x_part[2*p] > Lx1 ||
 	  x_part[2*p+1] > Lx2 ||
-	  (x_part[2*p] > box_range[0] && x_part[2*p] < box_range[1] &&
-	  x_part[2*p+1] > box_range[2] && x_part[2*p+1] < box_range[3])) {
+	  (x_part[2*p] > box_range[0]*dh && x_part[2*p] < box_range[1]*dh &&
+	  x_part[2*p+1] > box_range[2]*dh && x_part[2*p+1] < box_range[3]*dh)) {
       
 	x_part[2*p] = x_part[2*(np-1)];
 	x_part[2*p+1] = x_part[2*(np-1)+1];
@@ -494,7 +494,7 @@ int main(void) {
     cout << "End of iteration, np = " << np << endl << endl;
     
     // Output info
-    if (iter%25 == 0) {
+    if ((iter+1)%25 == 0) {
       for (int i = 0; i < nn; ++i) {
         DataFile << iter << " " << rho[i] << " " << phi[i] << " " << E_field[2*i] << " ";
 	DataFile << E_field[2*i + 1] << endl;
