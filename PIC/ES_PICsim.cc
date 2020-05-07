@@ -304,12 +304,17 @@ int main(void) {
   // Output files
   ofstream DataFile("Results/ES_PIC_Initial.txt");
   ofstream ParticleFile("Results/ParticleInfo.txt");
+  ofstream NumFile("Results/NumParticles.txt");
 
   DataFile << "Iteration / Ion Density / Electric Potential / Electric Field x1 / ";
-  DataFile << "Electric Field x2 / Number of Macroparticles" << std::endl;
+  DataFile << "Electric Field x2" << endl;
 
+  ParticleFile << "Iteration / x1 / x2 / v1 / v2";
+  ParticleFile << endl;
+
+  NumFile << "Iteration / Number of Macroparticles" << endl;
   // Main Loop
-  for (int iter = 0; iter < ts; ++iter) {     
+  for (int iter = 0; iter < ts + 1; ++iter) {     
     // Reset variables
     for (int i = 0; i<nn; ++i) {
       rho[i] = 0.0;
@@ -352,14 +357,14 @@ int main(void) {
       }
     }
     
-    std::cout << "Computing electric potential..." << std::endl;
+    cout << "Computing electric potential..." << endl;
     // Compute electric potential
     
     ////////////////////////////////
     jacobi_Update(phi, RHS, box_range, dh, dh, nx1, nx2, jacobi_max_iter, tol,
 		    n0, phi0, q, epsilon0, k, Te);
 
-    std::cout << "Computing electric field..." << std::endl;
+    cout << "Computing electric field..." << endl;
     // Compute electric field
     
     ////////////////////////////////////////
@@ -421,7 +426,7 @@ int main(void) {
       }
     }
 
-    std::cout << "Moving Particles..." << std::endl;
+    cout << "Moving Particles..." << endl;
     // Move particles
     
     ///////////////////////////////////////////
@@ -470,7 +475,7 @@ int main(void) {
       }
     }
 
-    std::cout << "Adding new particles..." <<std::endl;
+    cout << "Adding new particles..." << endl;
     // Generate particles
     for (int new_p = 0; new_p < np_insert; ++new_p) {
       x_part[2*(np + new_p)] = dh*(double(rand())/RAND_MAX);
@@ -486,21 +491,23 @@ int main(void) {
     }
     np += np_insert;
 
-    std::cout << "End of iteration, np = " << np << std::endl << std::endl;
+    cout << "End of iteration, np = " << np << endl << endl;
     
     // Output info
-    if (iter == 2) {
+    if (iter%25 == 0) {
       for (int i = 0; i < nn; ++i) {
-        DataFile << rho[i] << " " << phi[i] << " " << E_field[2*i] << " ";
-	DataFile << E_field[2*i + 1] << std::endl;
+        DataFile << iter << " " << rho[i] << " " << phi[i] << " " << E_field[2*i] << " ";
+	DataFile << E_field[2*i + 1] << endl;
       }
       for (int i = 0; i < np; ++i) {
-        ParticleFile <<x_part[2*i] << " " << x_part[2*i + 1] << " " << v_part[2*i] << " " ;
-	ParticleFile << v_part[2*i+1] << std::endl;
+        ParticleFile << iter << " " << x_part[2*i] << " " << x_part[2*i+1] << " " ;
+	ParticleFile << v_part[2*i] << " " << v_part[2*i+1] << endl;
       }
+
+      NumFile << iter << " " << np << endl;
     }
-    
   }
+
   delete(box_range);
   delete(x_part);
   delete(v_part);
