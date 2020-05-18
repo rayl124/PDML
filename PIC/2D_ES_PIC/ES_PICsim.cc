@@ -85,7 +85,7 @@ void jacobi_Update(double *phi,
     for (int i = 0; i < nx1; ++i) {
       for (int j = 0; j < nx2; ++j) {
         RHS[ij_to_index(i, j, nx2)] = RHS0[ij_to_index(i, j, nx2)] - 
-			n0*exp((phi[ij_to_index(i, j, nx2)] - phi0)/(k*Te));
+			n0*exp((phi[ij_to_index(i, j, nx2)] - phi0)/(Te));
 	RHS[ij_to_index(i, j, nx2)] = -q*RHS[ij_to_index(i, j, nx2)]/epsilon0;
       }
     }
@@ -196,14 +196,6 @@ void jacobi_Update(double *phi,
   delete(phi_new);
 }
 
-void LeapFrog(double *part_x,
-	      double *part_v,
-	      double dt,
-	      int ts) {
-
-}
-
-
 ////////////////////////////////////////////////////////////////////////
 //                                                                    //
 //                              Main Loop                             //
@@ -228,7 +220,8 @@ int main(void) {
   double phi_p = -5.0; // Plate potential [V]
 
   // Plasma parameters
-  double lambdaD = sqrt(epsilon0*k*Te/(q*q*n0));
+  // ******************DOUBLE CHECK THESE FORMULAS*********
+  double lambdaD = sqrt(epsilon0*Te/(q*n0));
   double vth = sqrt(2.0 * q * Ti/M);
 
   // Problem discretization
@@ -270,7 +263,7 @@ int main(void) {
   // Electric potential
   double *RHS = new double[nn];
   int jacobi_max_iter = 1e5;
-  double tol = 1.0e-6;
+  double tol = 1.0e-4;
   int index_ij;
 
   // Electric field
@@ -481,11 +474,11 @@ int main(void) {
       x_part[2*(np + new_p)] = dh*(double(rand())/RAND_MAX);
       x_part[2*(np + new_p) + 1] = Lx2*(double(rand())/RAND_MAX);
 
-      v_part[2*(np + new_p)] = v_drift + (double(rand())/RAND_MAX
+      v_part[2*(np + new_p)] = v_drift + 2.0*(double(rand())/RAND_MAX
 		     		 + double(rand())/RAND_MAX  
 			         + double(rand())/RAND_MAX 
 			       - 1.5)*vth;
-      v_part[2*(np + new_p) + 1] = 0.5*(double(rand())/RAND_MAX
+      v_part[2*(np + new_p) + 1] = 2.0*(double(rand())/RAND_MAX
 		      + double(rand())/RAND_MAX + double(rand())/RAND_MAX
 		      - 1.5)*vth;
     }
