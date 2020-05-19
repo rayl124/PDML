@@ -145,12 +145,12 @@ int main(void) {
   double phi_right = 0.0;
 
   // Particle info
-  int np_real = round(n0*v_drift*Lx2*dt); // Number of real particles entering
+  //int np_real = round(n0*v_drift*Lx2*dt); // Number of real particles entering
   int max_part = 4e6; // max_particles if none leave during time history
   
   // Particle data
   double *part_q = new double[max_part]; // Macroparticle charge
-  double *part_spwt = np_real/np_insert; // Particle weight
+  double *part_spwt = new double[max_part]; // Particle weight
   double *part_x = new double[max_part]; // Position
   double *part_v = new double[max_part]; // Velocity
 
@@ -172,18 +172,24 @@ int main(void) {
   int np = 0; 
   srand(time(NULL));
 
-
   // Move Particles
   double *part_E;
   
   // Calculate collisions setup
-  // Initialize for Ar^+ + Ar -> Ar^+ + Ar
-  double *coll_back = new double[2*176]; // Energy for backscattering for first 176,
-  					 // then corresponding cross section after
-  double *coll_iso = new double[2*176]; // Energy and CS for isotropic
-  // Electron-impact collisions
-  double *coll_elec = new double[];
+  // See cstrs.dat.txt for what each column is
+  double *coll_CS = new double[9*5996];
+  ifstream coll_data("cstrs.dat.txt");
+  // Ignore the first 2 lines
+  coll_data.ignore(1e5, '\n');
+  coll_data.ignore(1e5, '\n');
+  
+  for int(i = 0; i < 5996; ++i) {
+    for int (j = 0; j < 9; ++j) {
+      coll_data >> coll_CS[j*5996 + i]; 
+    }
+  }
 
+  coll_data.close();
 
   // Set up phi boundaries and initial values
   double *phi = new double[nn];
@@ -236,7 +242,7 @@ int main(void) {
       rho[node_index[p]+1] += part_spwt[p]*part_q[p]*weights[1];
     }
 
-    // Accont for volume
+    // Account for volume
     for (int i = 0; i < nn; ++i) {
       rho[i] /= dx*dx;
 
@@ -249,21 +255,25 @@ int main(void) {
     }
     
     cout << "Computing electric potential..." << endl;
+
     //////////////////////////////////////////////////
 
     // Compute electric potential
     
     /////////////////////////////////////////////////
+    
     jacobi_Update(phi, RHS, elec_range, phi_left, phi_right,
 		    dx, nn, jacobi_max_iter, tol, 
 		    n0, phi0, e, epsilon0, k, Te);
 
     cout << "Computing electric field..." << endl;
+
     /////////////////////////////////////////////////
 
     // Compute electric field
     
     //////////////////////////////////////////////////
+    
     for (int i = 0; i < nn; ++i) {
       // Left
       if (i == 0) {
@@ -278,11 +288,13 @@ int main(void) {
     }
 
     cout << "Moving Particles..." << endl;
+
     //////////////////////////////////////////////////
 
     // Move particles
     
     //////////////////////////////////////////////////
+
     // Uses same weights as charge density
     for (int p = 0; p < np; ++p) {      
 
@@ -319,7 +331,13 @@ int main(void) {
     }
 
     cout << "Adding new particles..." << endl;
+
+    //////////////////////////////////////////////////
+
     // Generate particles
+
+    ////////////////////////////////////////////////
+    /*
     for (int new_p = 0; new_p < np_insert; ++new_p) {
       x_part[2*(np + new_p)] = dh*(double(rand())/RAND_MAX);
       x_part[2*(np + new_p) + 1] = Lx2*(double(rand())/RAND_MAX);
@@ -333,10 +351,15 @@ int main(void) {
 		      - 1.5)*vth;
     }
     np += np_insert;
-
+*/
     cout << "End of iteration, np = " << np << endl << endl;
+
+    ////////////////////////////////////////////////////
     
     // Output info
+    
+    ////////////////////////////////////////////////////
+
     if ((iter+1)%25 == 0) {
       for (int i = 0; i < nn; ++i) {
         FieldFile << iter << " " << rho[i] << " " << phi[i] << " " << E_field[i];
@@ -363,6 +386,7 @@ int main(void) {
   delete(E_field);
   delete(part_E);
   delete(phi);
+  delete(coll_CS);
 
   return 0;
 }
