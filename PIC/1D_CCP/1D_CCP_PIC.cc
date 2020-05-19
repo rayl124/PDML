@@ -100,7 +100,7 @@ void jacobi_Update(double *phi,
 
 int main(void) {
 
-  // Constantsa
+  // Constants
   const double epsilon0 = 8.854e-12; // Permittivity of free space
   const double e = 1.602e-19; // Elementary charge [C]
   const double k = 1.381e-23; // Boltzman constant [J/K]
@@ -176,6 +176,15 @@ int main(void) {
   // Move Particles
   double *part_E;
   
+  // Calculate collisions setup
+  // Initialize for Ar^+ + Ar -> Ar^+ + Ar
+  double *coll_back = new double[2*176]; // Energy for backscattering for first 176,
+  					 // then corresponding cross section after
+  double *coll_iso = new double[2*176]; // Energy and CS for isotropic
+  // Electron-impact collisions
+  double *coll_elec = new double[];
+
+
   // Set up phi boundaries and initial values
   double *phi = new double[nn];
   double t;
