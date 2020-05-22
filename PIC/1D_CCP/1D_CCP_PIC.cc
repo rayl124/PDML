@@ -1,10 +1,11 @@
 #include <iostream>
 #include <math.h>
-#include <algorithm>
 #include <ctime>
 #include <fstream>
 #include <cstdlib>
 
+#include <1D_Poisson.h>
+#include <collisionModules.h>
 
 using namespace std;
 
@@ -19,78 +20,6 @@ weights[0] = 1 - hx;
 weights[1] = hx;
 }
 
-// solves laplace(phi) = -rho/epsilon0 = f
-void jacobi_Update(double *phi,
-		double *RHS,
-		int *elec_range,
-		double phi_left,
-		double phi_right,
-		double dx,
-		int nn,
-		const int jacobi_max_iter,
-		const double tol,
-		const double n0,
-		const double phi0,
-		const double e,
-		const double epsilon0,
-		const double k,
-		const double Te) {
-
-  double *phi_new = new double[nn];
-  double *RHS0 = new double[nn];
-  
-  int jacobi_iter = 0;
-  double residual;
-  
-  // Add dirichlet boundaries
-  for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
-    phi[node] = phi_left;
-  }
-
-  for (int i = elec_range[2]; i <= elec_range[3]; ++i) {
-    phi[node] = phi_right;
-  }
-
-  copy_n(phi, nn, phi_new);
-  copy_n(RHS, nn, RHS0);
-
-  while (jacobi_iter <= jacobi_max_iter) {
-    ++jacobi_iter;
-    residual = 0.0;
-
-    if (jacobi_iter%1000 == 0) {
-      std::cout << "Jacobi iter = " << jacobi_iter << std::endl;
-    }
-
-    // Update RHS term to include electron terms
-    for (int i = 0; i < nn; ++i) {
-      RHS[i] = RHS0[i] - n0*exp(q*(phi[i]-phi0)/(k*Te));
-      RHS[i] = -q*RHS[i]/epsilon0;
-    }
-
-    // Run Jacobi update for interior nodes
-    for (int i = elec_range[1] + 1; i < elec_range[2]; ++i) {
-      phi_new[i] = 0.5*(phi[i-1] + phi[i+1] - pow(dx,2.0)*RHS[i]);
-    }
-
-    // Calculate the residual
-    for (int i = 0; i < nn; ++i) {
-      residual += pow(phi_new[i] - phi[i], 2.0);
-    }
-    residual = sqrt(residual);
-
-    // Update phi to be phi_new
-    copy_n(phi_new, nn, phi);
-
-    if (residual < tol) {
-      break;
-    }
-    if (jacobi_iter == jacobi_max_iter) {
-      cout << "Jacobi could not converge" << endl;
-    }
-  }
-  delete(phi_new);
-}
 
 ////////////////////////////////////////////////////////////////////////
 //                                                                    //
@@ -103,30 +32,20 @@ int main(void) {
   // Constants
   const double epsilon0 = 8.854e-12; // Permittivity of free space
   const double e = 1.602e-19; // Elementary charge [C]
-  const double k = 1.381e-23; // Boltzman constant [J/K]
+  const double k_B = 1.381e-23; // Boltzman constant [J/K]
   const double AMU = 1.661e-27; // Atomic Mass Unit [kg]
-  const double M = 32.0*AMU; // Ion mass of O2 [kg]
+  const double m_n = 39.948*AMU; // Ion mass of Ar [kg]
+  const double m_e = 9.109e-31; // Electron mass [kg]
 
   // Input settings
   double n0 = 1.0e12; // Electron density [#/m^3]
   double phi0 = 0.0; // Reference potential
-  double Te = 3000; // Electron temp [K], figure this out later
-  double Ti = 300; // Ion temp [K]
-  double v_drift = 7.0e3; // Ion injection velocity [m/s]
-  double phi_p = -5.0; // Plate potential [V]
-
-  // DOUBLE CHECK THESE FORMULAS !!!!!!!///
-  // Plasma parameters
-  //double lambdaD = sqrt(epsilon0*Te/(q*n0));
-  double vth = sqrt(2.0 * k * Ti/M);
+  double T_n = 300; // Neutral temp, [K]
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
   int ts = 4e6; // # of time steps
   double dx = 5.0e-4; // length of each cell
-  int np_insert = (nx2-1)*15; // Put 15 macroparticles per time step
-
-  // Other helpful values
   double dt = 1.0/(27.12e6*200.0); 
   double L = 0.095; // Domain length m
 
@@ -148,17 +67,35 @@ int main(void) {
   //int np_real = round(n0*v_drift*Lx2*dt); // Number of real particles entering
   int max_part = 4e6; // max_particles if none leave during time history
   
-  // Particle data
-  double *part_q = new double[max_part]; // Macroparticle charge
-  double *part_spwt = new double[max_part]; // Particle weight
-  double *part_x = new double[max_part]; // Position
-  double *part_v = new double[max_part]; // Velocity
+  // Electron particle data
+  double *part_e_spwt = new double[max_part]; // Particle weight
+  double *part_e_x = new double[max_part]; // Position
+  double *part_e_vx = new double[max_part]; // Velocity
+  double *part_e_vy = new double[max_part];
+  double *part_e_vz = new double[max_part];
+  // To convert J to eV divide by e (elementary charge)
+  double *part_e_epsilon = new double[max_part]; // Energy [J]
+  int np_e;
+
+  // Ion particle data
+  double *part_i_spwt = new double[max_part]; // Particle weight
+  double *part_i_x = new double[max_part]; // Position
+  double *part_i_vx = new double[max_part]; // Velocity
+  double *part_i_vy = new double[max_part];
+  double *part_i_vz = new double[max_part];
+  // To convert J to eV divide by e (elementary charge)
+  double *part_i_epsilon = new double[max_part]; // Energy [J]
+  int np_i;
+
+  double part_q;
+  double max_epsilon = 0.0;
 
   // Various helper variabes
   // Charge density
   double *weights = new double[2];
   double *node_index = new double[max_part];
   double *rho = new double[nn]; // Density at each node
+  
 
   // Electric potential
   double *RHS = new double[nn];
@@ -169,7 +106,6 @@ int main(void) {
   double *E_field = new double[nn];
 
   // Generate particles
-  int np = 0; 
   srand(time(NULL));
 
   // Move Particles
@@ -177,15 +113,32 @@ int main(void) {
   
   // Calculate collisions setup
   // See cstrs.dat.txt for what each column is
-  double *coll_CS = new double[9*5996];
-  ifstream coll_data("cstrs.dat.txt");
+  int *N_coll = new int[4]; // Types of collisions for each reaction
+  N_coll[0] = 4;
+  N_coll[1] = 2;
+  N_coll[2] = 2;
+  N_coll[3] = 1;
+
+  double *CS_energy = new double[5996]; // energy values
+  double *el_n_CS = new double[N_coll[0]*5996]; // electron-neutral
+  double *el_ex_CS = new double[N_coll[1]*5996]; // electron-excited
+  double *i_n_CS = new double [N_coll[2]*5996]; // ion-neutral
+
+  ifstream coll_data("crtrs.dat.txt");
   // Ignore the first 2 lines
   coll_data.ignore(1e5, '\n');
   coll_data.ignore(1e5, '\n');
   
-  for int(i = 0; i < 5996; ++i) {
-    for int (j = 0; j < 9; ++j) {
-      coll_data >> coll_CS[j*5996 + i]; 
+  for (int i = 0; i < 5996; ++i) {
+    coll_data >> CS_energy[i];
+    for (int j = 0; j < N_coll[0]; ++j) {
+      coll_data >> el_n_CS[j*5996 + i];
+    }
+    for (int j = 0; j < N_coll[1]; ++j) {
+      coll_data >> el_ex_CS[j*5996 + i];
+    }
+    for (int j = 0; j < N_coll[2]; ++j) {
+      coll_data >> i_n_CS[j*5996 + i];
     }
   }
 
@@ -211,6 +164,7 @@ int main(void) {
   ParticleFile << endl;
 
   NumFile << "Iteration / Number of Macroparticles" << endl;
+
   // Main Loop
   for (int iter = 0; iter < ts; ++iter) {
     // Electrode Potential
@@ -219,6 +173,7 @@ int main(void) {
 	    V_lf*sin(2*M_PI*f_lf*t);
 
     // Reset variables
+    
     for (int i = 0; i< nn; ++i) {
       rho[i] = 0.0;
       E_field[i] = 0.0;
@@ -235,11 +190,19 @@ int main(void) {
     /////////////////////////////////////////////////
     
     // Get charge from particles
-    for (int p = 0; p < np; ++p) {
-      get_Weights(x_part[p], weights, &node_index[p], dx);
-      
-      rho[node_index[p]] += part_spwt[p]*part_q[p]*weights[0];
-      rho[node_index[p]+1] += part_spwt[p]*part_q[p]*weights[1];
+    // Electrons
+    for (int p = 0; p < np_e; ++p) {
+      get_Weights(part_e_x[p], weights, &node_index[p], dx);
+
+      rho[node_index[p]] += part_spwt[p]*(-1.0*e)*weights[0];
+      rho[node_index[p]+1] += part_spwt[p]*(-1.0*e)*weights[1];
+    }
+    // Ions
+    for (int p = 0; p < np_i; ++p) {
+      get_Weights(part_i_x[p], weights, &node_index[p], dx);
+
+      rho[node_index[p]] += part_spwt[p]*(e)*weights[0];
+      rho[node_index[p]+1] += part_spwt[p]*(e)*weights[1];
     }
 
     // Account for volume
@@ -250,8 +213,8 @@ int main(void) {
       if (i == 0 || i == nn-1) {
 	rho[i] *= 2.0;
       }
-      // Charge density for ions only, does not include electron term
-      RHS[i] = rho[i];
+      // Right hand side of Poisson equation
+      RHS[i] = -rho[i]/epsilon0;
     }
     
     cout << "Computing electric potential..." << endl;
@@ -262,9 +225,7 @@ int main(void) {
     
     /////////////////////////////////////////////////
     
-    jacobi_Update(phi, RHS, elec_range, phi_left, phi_right,
-		    dx, nn, jacobi_max_iter, tol, 
-		    n0, phi0, e, epsilon0, k, Te);
+    triDiagSolver(phi, RHS, elec_range, phi_left, phi_right, dx, nn);
 
     cout << "Computing electric field..." << endl;
 
@@ -277,13 +238,13 @@ int main(void) {
     for (int i = 0; i < nn; ++i) {
       // Left
       if (i == 0) {
-	E_field[index_ij] = -(phi[1] - phi[0])/dx;
+	E_field[i] = -(phi[1] - phi[0])/dx;
       } // Right
       else if (i == nn-1) {
-	E_field[index_ij] = -(phi[i] -  phi[i-1])/dx;
+	E_field[i] = -(phi[i] -  phi[i-1])/dx;
       }
       else {
-	E_field[index_ij] = -(phi[i+1] - phi[i-1])/(2.0*dh);
+	E_field[i] = -(phi[i+1] - phi[i-1])/(2.0*dh);
       }
     }
 
@@ -296,13 +257,40 @@ int main(void) {
     //////////////////////////////////////////////////
 
     // Uses same weights as charge density
-    for (int p = 0; p < np; ++p) {      
+    for (int p = 0; p < np_e; ++p) {      
+      get_Weights(part_e_x[p], weights, &node_index[p], dx);
 
       part_E = E_field[node_index[p]]*weights[0] +
 	          E_field[node_index[p] + 1]*weights[1];
 
-      part_v[p] = part_v[p] + (part_q[p]/M)*part_E*dt;
-      part_x[p] = part_x[p] + part_v[p]*dt;
+      part_e_vx[p] = part_e_vx[p] + (-1.0*e)/(m_e)*part_E*dt;
+      part_e_x[p] = part_e_x[p] + part_e_vx[p]*dt;
+
+      part_e_epsilon[p] = 0.5*m_e*(part_e_vx[p]*part_e_vx[p]+
+		      part_e_vy[p]*part_e_vy[p] +
+		      part_e_vz[p]*part_e_vz[p]);
+      if (part_e_epsilon[p] > max_e_epsilon) {
+        max_e_epsilon = part_e_epsilon[p];
+      }
+    }
+    for (int p = 0; p < np_i; ++p) {      
+      get_Weights(part_i_x[p], weights, &node_index[p], dx);
+
+      part_E = E_field[node_index[p]]*weights[0] +
+	          E_field[node_index[p] + 1]*weights[1];
+
+      part_i_vx[p] = part_i_vx[p] + (e)/(m_n)*part_E*dt;
+      part_i_x[p] = part_i_x[p] + part_i_vx[p]*dt;
+
+      part_i_epsilon[p] = 0.5*m_e*(part_i_vx[p]*part_i_vx[p]+
+		      part_i_vy[p]*part_i_vy[p] +
+		      part_i_vz[p]*part_i_vz[p]);
+
+     if (part_i_epsilon[p] > max_i_epsilon) {
+        max_i_epsilon = part_i_epsilon[p];
+      }
+    }
+
  
       /*
       // Check for boundaries
@@ -366,7 +354,7 @@ int main(void) {
 	FieldFile << endl;
       }
       for (int i = 0; i < np; ++i) {
-        ParticleFile << iter << " " << part_x[i] << " " << part_v[i] << " ";
+        ParticleFile << iter << " " << part_x[i] << " " << part_vx[i] << " ";
 	ParticleFile << part_spwt[i] << " " << part_q[i] << endl;
       }
 

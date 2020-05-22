@@ -3,11 +3,18 @@
 #include <ctime>
 
 using namespace std;
-int main() {
-srand(time(nullptr));
-  for (int i = 0; i < 10 ; ++i) {
-	  
-	  cout<< double(rand())/(RAND_MAX) + double(rand())/(RAND_MAX)<< std::endl;
-  }
+double inside_fun(void) {
+	return double(rand())/(RAND_MAX);
 
+}
+
+int main(void) {
+srand(time(nullptr));
+cout << "running rando" << endl;
+  for (int i = 0; i < 10 ; ++i) {
+
+     
+      cout << inside_fun() << endl;
+   }
+return 0;
 }

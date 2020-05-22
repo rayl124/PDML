@@ -221,7 +221,7 @@ int main(void) {
 
   // Plasma parameters
   // ******************DOUBLE CHECK THESE FORMULAS*********
-  double lambdaD = sqrt(epsilon0*Te/(q*n0));
+  double lambdaD = sqrt(epsilon0*k*Te/(q*q*n0));
   double vth = sqrt(2.0 * q * Ti/M);
 
   // Problem discretization
@@ -427,6 +427,8 @@ int main(void) {
     for (int p = 0; p < np; ++p) {      
       int i = node_index[2*p];
       int j = node_index[2*p+1];
+
+      get_Weights(&x_part[2*p], weights, &node_index[2*p], dh);
 
       E_part[0] = E_field[2*ij_to_index(i, j, nx2)]*weights[0] +
 	          E_field[2*ij_to_index(i + 1, j, nx2)]*weights[1] +
