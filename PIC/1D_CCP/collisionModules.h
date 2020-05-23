@@ -5,23 +5,25 @@
 #include <ctime>
 #include <math.h>
 
-double getP(double epsilon,
-	    double sigma,
-	    double m,
-	    double n_target,
-	    double dt) {
-  double v = sqrt(2*epsilon/m);
-  double nu = v*sigma*n_target;
-  return 1.0-exp(-dt*nu);
-}
-
-int searchIndex(double target,
+/* Given a set of data and a target value,
+ * this will return the index of the value that is
+ * the closest but under the target value
+ *
+ * target: target value
+ * data_set: the array to search through
+ * data_set_length: number of elements in array
+ *
+ */
+ int searchIndex(double target,
 		double *data_set,
 		int data_set_length) {
   int guess = round((data_set_length - 1)/2.0);
   int a = 0;
   int b = data_set_length - 1;
 
+  if (target > data_set[data_set_length-1]) {
+    return data_set_length-1;
+  }
   while(1) {
     if (data_set[guess] == target) {
       return guess;
@@ -44,94 +46,173 @@ int searchIndex(double target,
     }
     guess = round((b+a)/2.0);
   }
-  
 }
-
+/* Linearly interpolates between two values
+ * Returns interpolated y value
+ * target_x: value interpolated at
+ * x1, x2: left and right x bounds
+ * y1, y2: left and right y bounds
+ *
+ */
 double linInterp(double target_x,
 		double x1, double x2,
 		double y1, double y2) {
   return (y2-y1)*(target_x - x1)/(x2-x1) + y1;
 }
 
+double getP(double epsilon,
+	    double sigma,
+	    double m,
+	    double n_target,
+	    double dt) {
+  double e = 1.602e-19;
+  double v = sqrt(2*e*epsilon/m);
+  double nu = v*sigma*n_target;
+  return 1.0-exp(-dt*nu);
+}
+
+double getv(double vx, double vy, double vz) {
+  return sqrt(vx*vx + vy*vy + vz*vz);
+}
+
+/* Returns number of particles that partake in collisions
+ * Also returns max frequency for collision type calculations
+ *
+ * CS_energy: array of energy vallues of length data_set_length
+ * CS_data: array of cross section values for each type of collision
+ * 	    of length N_coll*data_set_length
+ * epsilon_max: max energy of all particles [eV]
+ * nu_max: frequency to be returned
+ * N_c: number of particles to partake in collisions
+ * m_source: mass of source particle [kg]
+ * n_target: density of target particle [#/m^3]
+ * dt: time step [s]
+ * np: number of total particles of source species
+ * e: elementary charge [C]
+ * N_coll: number of different collision types
+ * data_set_length: length of arrays
+*/ 	
+void getNullCollPart(double *CS_energy,
+		     double *CS_data,
+		     double epsilon_max,
+		     double *nu_max, double *N_c,
+		     double m_source, double n_target, 
+		     double dt, double np,
+		     int N_coll, int data_set_length) {
+
+  int search_index;
+  double sigma_total = 0.0;
+  const double e = 1.602e-19;
+
+  search_index = searchIndex(epsilon_max, CS_energy,
+		    data_set_length);
+
+  for (int i = 0; i < N_coll; ++i) {
+       sigma_total += linInterp(epsilon_max, CS_energy[search_index],
+		       CS_energy[search_index + 1],
+		       CS_data[i*data_set_length + search_index],
+		       CS_data[i*data_set_length + search_index + 1]);
+  }
+
+  // Convert energy to joules then calculate velocity
+  double v = sqrt(2*e*epsilon_max/m_source); 
+  
+  // Returned values
+  *nu_max = v*sigma_total*n_target;
+  *N_c = round(np*(1.0-exp(-dt*(*nu_max))));
+}
+
+
+/* Return type of collision from 0 through N_coll, where N_coll
+ * is the null collision
+ *
+ * CS_energy: array of energy vallues of length data_set_length
+ * CS_data: array of cross section values for each type of collision
+ * 	    of length N_coll*data_set_length
+ * epsilon: energy of particle [eV]
+ * nu_max: max frequency, found in getNullCollPart
+ * m_source: mass of source particle [kg]
+ * n_target: density of target particle [#/m^3]
+ * e: elementary charge [C]
+ * N_coll: number of different collision types
+ * data_set_length: length of arrays
+*/ 	
+
 int getCollType(double *CS_energy,
 		   double *CS_data,
 		   double epsilon,
-		   double epsilon_max,
-		   double n_target,
-		   double m_source,
-		   double np, double dt,
+		   double nu_max,
+		   double m_source, double n_target,
 		   int N_coll, int data_set_length) {
 
   double *P_vec = new double[N_coll + 1]; // Include P0 = 0
-  double *sigma = new double[N_coll];
-
-  double v_max = sqrt(2*epsilon_max/m_source);
-  
+  double *sigma = new double[N_coll];  
+  double *nu = new double[N_coll];
   double sigma_total;
   int search_index;
-
+  const double e = 1.602e-19;
+  
+  search_index = searchIndex(epsilon, CS_energy, data_set_length);
   for (int i = 0; i < N_coll; ++i) {
-    search_index = searchIndex(epsilon, CS_data, data_set_length);
-    sigma[y] = linInterp(epsilon, CS_energy[search_index],
+       sigma[i] = linInterp(epsilon, CS_energy[search_index],
 	       CS_energy[search_index + 1], 
 	       CS_data[i*data_set_length + search_index],
 	       CS_data[i*data_set_length + search_index + 1]);
-    sigma_total += sigma[i];
   }
-  
-  double nu_max = v_max*sigma_total*n_target;
-  
+    
+  double v = sqrt(2*e*epsilon/m_source);
   // P0 = 0, P1 = nu_1/nu_max, p2 ....
   P_vec[0] = 0.0;
   for (int i = 0; i < N_coll; ++i) {
+    P_vec[i+1] = 0.0;
     nu[i] = v*sigma[i]*n_target;
     for (int j = 0; j <= i; ++j) {
-      P_vec[i+1] += nu[i];
+      P_vec[i+1] += nu[j];
     }
-    P_vec[i] = P_vec[i]/nu_max;
+    P_vec[i+1] = P_vec[i+1]/nu_max;
   }
 
   double R = double(rand())/RAND_MAX;
-  // if P_i < R < P_i+1, collision is type i+1
+  // if P_i < R < P_i+1, collision is type i, where tyoe N_coll is null
   search_index = searchIndex(R, P_vec, N_coll + 1);
 
   delete(P_vec);
   delete(sigma);
+  delete(nu);
 
   return search_index;
 }
 
 
-// Models isotropic charge exchange OR
-// is used to give newly created excited atoms
-// a thermal velocity
+// Take a maxwellian sample of the thermal velocity
+// Also used to simulate ion-neutral collision
 void thermalVelSample(double *part_vx,
 			 	double *part_vy,
 				double *part_vz,
 				double T_n,
-				double k_B,
 				double m_n) {
-  // Neutral thermal velocity
-  double v_nth = sqrt(2*k_B*T_n/m_n);
+
+  const double k_B = 1.381e-23;
+  // Thermal velocity
+  double v_th = sqrt(2*k_B*T_n/m_n);
 
   int M = 3;
-  double f_M = new double[3];
+  double f_M = 0.0;
 
-
+  
   // Maxwellian frequency
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 1; j <= M; ++j) {
-      f_M[i] += double(rand())/RAND_MAX;
-    }
-    f_M[i] = (f_M - M/2.0)*(1/(sqrt(M/12)));
+  for (int j = 1; j <= M; ++j) {
+  f_M += double(rand())/RAND_MAX;
   }
+  f_M = (f_M - M/2.0)*(1.0/(sqrt(M/12.0)));
 
-  // Replace ion velocity with neutral velocity
-  *part_vx = f_M[0]*v_nth;
-  *part_vy = f_M[1]*v_nth;
-  *part_vz = f_M[2]*v_nth;
+  double phi = (double(rand())/RAND_MAX)*2*M_PI;
+  double theta = (double(rand())/RAND_MAX)*2*M_PI;
 
-  delete(f_M);
+  // Replace velocity with sampled velocity
+  *part_vx = f_M*v_th*cos(phi)*cos(theta);
+  *part_vy = f_M*v_th*cos(phi)*sin(theta);
+  *part_vz = f_M*v_th*sin(phi);
 }
 
 void e_elastic(double *part_vx,
@@ -150,9 +231,7 @@ void e_elastic(double *part_vx,
   double v_newx;
   double v_newy;
   double v_newz;
-  double v = sqrt(pow(*part_vx,2.0) +
-		  pow(*part_vy,2.0) +
-		  pow(*part_vz,2.0));
+  double v = getv(*part_vx, *part_vy, *part_vz);
 
   v_newx = (*part_vx)*cos(chi) +
 	   (*part_vy)*v*sin(chi)*sin(phi)/
@@ -199,9 +278,7 @@ void e_excitation(double *part_vx,
   double v_newx;
   double v_newy;
   double v_newz;
-  double v = sqrt(pow(*part_vx,2.0) +
-		  pow(*part_vy,2.0) +
-		  pow(*part_vz,2.0));
+  double v = getv(*part_vx, *part_vy, *part_vz);
 
   v_newx = (*part_vx)*cos(chi) +
 	   (*part_vy)*v*sin(chi)*sin(phi)/
@@ -235,7 +312,7 @@ void e_ionization(double *part_vx,
 		double *part_vz,
 		double *part_ej_vx,
 		double *part_ej_vy,
-		double *part_ej,vz,
+		double *part_ej_vz,
 		double epsilon_inc,
 		double epsilon_ion,
 		double m_e,
@@ -261,9 +338,7 @@ void e_ionization(double *part_vx,
   double v_newx;
   double v_newy;
   double v_newz;
-  double v = sqrt(pow(*part_vx,2.0) +
-		  pow(*part_vy,2.0) +
-		  pow(*part_vz,2.0));
+  double v = getv(*part_vx, *part_vy, *part_vz);
 
   // Ejected electron
   v_newx = (*part_vx)*cos(chi_ej) +

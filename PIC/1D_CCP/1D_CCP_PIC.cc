@@ -318,28 +318,13 @@ int main(void) {
       } */
     }
 
-    cout << "Adding new particles..." << endl;
+    cout << "Calculating collisions..." << endl;
 
     //////////////////////////////////////////////////
 
-    // Generate particles
-
-    ////////////////////////////////////////////////
-    /*
-    for (int new_p = 0; new_p < np_insert; ++new_p) {
-      x_part[2*(np + new_p)] = dh*(double(rand())/RAND_MAX);
-      x_part[2*(np + new_p) + 1] = Lx2*(double(rand())/RAND_MAX);
-
-      v_part[2*(np + new_p)] = v_drift + 0.5*(double(rand())/RAND_MAX
-		     		 + double(rand())/RAND_MAX  
-			         + double(rand())/RAND_MAX 
-			       - 1.5)*vth;
-      v_part[2*(np + new_p) + 1] = 0.5*(double(rand())/RAND_MAX
-		      + double(rand())/RAND_MAX + double(rand())/RAND_MAX
-		      - 1.5)*vth;
-    }
-    np += np_insert;
-*/
+    // Collision modules
+    
+    //////////////////////////////////////////////////
     cout << "End of iteration, np = " << np << endl << endl;
 
     ////////////////////////////////////////////////////

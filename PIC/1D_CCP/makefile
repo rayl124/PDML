@@ -8,3 +8,6 @@ ifstream_test: ifstream_test.cc
 
 interpolate_test: interpolate_test.cc
 	$(CC) -g -o interpolate_test interpolate_test.cc
+
+collision_test: collision_test.cc collisionModules.h
+	$(CC) -g -o collision_test collision_test.cc -lm
