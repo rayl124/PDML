@@ -73,7 +73,7 @@ int main(void) {
 
   
 
-  double test_epsilon = 3.92e-3;
+  double test_epsilon = 3.925e-2;
 
   int index;
   index  = searchIndex(test_epsilon, CS_energy, data_length);
@@ -83,7 +83,8 @@ int main(void) {
 		 (CS_energy[index+1]-CS_energy[index]))*
 	  	 (test_epsilon - CS_energy[index]) + el_n_CS[index];
 
-  cout << index << " " << interp_value << endl;
+  cout <<"Test epsilon:  " << test_epsilon << " , Cross Section Value: ";
+  cout << interp_value << endl;
 
 }
 

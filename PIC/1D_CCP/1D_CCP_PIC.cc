@@ -35,6 +35,7 @@ int main(void) {
   const double k_B = 1.381e-23; // Boltzman constant [J/K]
   const double AMU = 1.661e-27; // Atomic Mass Unit [kg]
   const double m_n = 39.948*AMU; // Ion mass of Ar [kg]
+  const double m_i = m_n;
   const double m_e = 9.109e-31; // Electron mass [kg]
 
   // Input settings
@@ -112,6 +113,10 @@ int main(void) {
   double *part_E;
   
   // Calculate collisions setup
+  double max_index, nu_max, P_max, N_c;
+  int rand_index, type;
+  double epsilon_exc, epsilon_ion;
+
   // See cstrs.dat.txt for what each column is
   int *N_coll = new int[4]; // Types of collisions for each reaction
   N_coll[0] = 4;
@@ -325,6 +330,95 @@ int main(void) {
     // Collision modules
     
     //////////////////////////////////////////////////
+    
+    // Get number of particles for electron - neutral collisions
+    getNullCollPart(CS_energy, e_n_CS, max_e_epsilon, &nu_max, &P_max, &N_c,
+		  m_e, n_n, dt, np_e, N_coll[0], data_set_length);
+
+
+    for (int i = 0; i < N_c; ++i) {
+      rand_index = round((double(rand())/RAND_MAX)*(np_e-1));
+      type = getCollType(CS_energy, e_n_CS, part_e_epsilon[rand_index],
+		    nu_max, m_e, n_n, N_coll[0], data_set_length);
+    
+      // switch-case for electron-neutral collisions
+      // 0 - elastic
+      // 1 - excitation 1
+      // 2 - excitation 2
+      // 3 - ionization
+      // 4 - null
+      switch(type) {
+        case 0:
+	  e_elastic(&part_e_vx[rand_index], &part_e_vy[rand_index],
+		  &part_e_vz[rand_index], part_e_epsilon[rand_index],
+		  m_e, m_n);
+          part_e_epsilon[rand_index] = 0.5*m_e*pow(getv(part_e_vx[rand_index], 
+			part_e_vy[rand_index], part_e_vz[rand_index]),2.0)/e; //[eV]
+	  continue;
+        case 1:
+	  epsilon_exc = 1.160330e1; // From crtrs.dat.txt
+	  e_excitation(&part_e_vx[rand_index], &part_e_vy[rand_index],
+		  &part_e_vz[rand_index], part_e_epsilon[rand_index], 
+		  epsilon_exc);	
+	  continue;
+        case 2:
+	  epsilon_exc = 1.31041e1; // From crtrs.dat.txt
+	  e_excitation(&part_e_vx[rand_index], &part_e_vy[rand_index],
+		  &part_e_vz[rand_index], part_e_epsilon[rand_index], 
+		  epsilon_exc);
+	  part_e_epsilon[rand_index] = 0.5*m_e*pow(getv(part_e_vx[rand_index], 
+			part_e_vy[rand_index], part_e_vz[rand_index]),2.0)/e; //[eV]
+	  continue;
+        case 3:
+	  np_e += 1;
+	  part_e_vx[np_e-1] = 0.0;
+	  part_e_vy[np_e-1] = 0.0;
+	  part_e_vz[np_e-1] = 0.0;
+	  epsilon_ion = 1.60055e1; // From crtrs.dat.txt
+	  e_ionization(&part_e_vx[rand_index], &part_e_vy[rand_index],
+		  &part_e_vz[rand_index], &part_e_vx[np_e-1], &part_e_vy[np_e-1],
+		  &part_e_vz[np_e-1], part_e_epsilon[rand_index], 
+		  epsilon_ion);
+	  part_e_epsilon[rand_index] = 0.5*m_e*pow(getv(part_e_vx[rand_index], 
+			part_e_vy[rand_index], part_e_vz[rand_index]),2.0)/e; //[eV]
+	  part_e_epsilon[np_e-1] = 0.5*m_e*pow(getv(part_e_vx[np_e-1], 
+			part_e_vy[np_e-1], part_e_vz[np_e-1]),2.0)/e; //[eV]
+	  continue;	
+      case 4:
+	  continue;
+      }
+    }
+    
+    // Ion-neutral collisions
+    getNullCollPart(CS_energy, i_n_CS, max_i_epsilon, &nu_max, &P_max, &N_c,
+		  m_i, n_n, dt, np_i, N_coll[1], data_set_length);
+
+
+    for (int i = 0; i < N_c; ++i) {
+      rand_index = round((double(rand())/RAND_MAX)*(np_i-1));
+      type = getCollType(CS_energy, i_n_CS, part_i_epsilon[rand_index],
+		    nu_max, m_i, n_n, N_coll[0], data_set_length);
+    
+      // switch-case for electron-neutral collisions
+      // 0 - charge exchange
+      // 1 - back scattering
+      // 2 - null
+      switch(type) {
+        case 0:
+	  thermalVelSampe(&part_i_vx[rand_index], &part_i_vy[rand_index],
+			  &part_i_vz[rand_index], T_n, m_n);
+	  part_e_epsilon[rand_index] = 0.5*m_i*pow(getv(part_i_vx[rand_index], 
+			part_i_vy[rand_index], part_i_vz[rand_index]),2.0)/e; //[eV]
+	  continue;
+        case 1:
+	  
+	  continue;
+        case 2:
+	  continue;
+      }
+    }
+
+
     cout << "End of iteration, np = " << np << endl << endl;
 
     ////////////////////////////////////////////////////

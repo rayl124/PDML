@@ -38,7 +38,7 @@
     }
     else {
       if (data_set[guess - 1] < target) {
-        return guess;
+        return guess - 1;
       } 
       else {
         b = guess;
@@ -95,7 +95,7 @@ double getv(double vx, double vy, double vz) {
 void getNullCollPart(double *CS_energy,
 		     double *CS_data,
 		     double epsilon_max,
-		     double *nu_max, double *N_c,
+		     double *nu_max, double *P_max, double *N_c,
 		     double m_source, double n_target, 
 		     double dt, double np,
 		     int N_coll, int data_set_length) {
@@ -106,7 +106,7 @@ void getNullCollPart(double *CS_energy,
 
   search_index = searchIndex(epsilon_max, CS_energy,
 		    data_set_length);
-
+  
   for (int i = 0; i < N_coll; ++i) {
        sigma_total += linInterp(epsilon_max, CS_energy[search_index],
 		       CS_energy[search_index + 1],
@@ -116,10 +116,11 @@ void getNullCollPart(double *CS_energy,
 
   // Convert energy to joules then calculate velocity
   double v = sqrt(2*e*epsilon_max/m_source); 
-  
+  *P_max = getP(epsilon_max, sigma_total, m_source,
+			n_target, dt);
   // Returned values
   *nu_max = v*sigma_total*n_target;
-  *N_c = round(np*(1.0-exp(-dt*(*nu_max))));
+  *N_c = round(np*(*P_max));
 }
 
 
@@ -189,12 +190,12 @@ int getCollType(double *CS_energy,
 void thermalVelSample(double *part_vx,
 			 	double *part_vy,
 				double *part_vz,
-				double T_n,
-				double m_n) {
+				double T_part,
+				double m_part) {
 
   const double k_B = 1.381e-23;
   // Thermal velocity
-  double v_th = sqrt(2*k_B*T_n/m_n);
+  double v_th = sqrt(2*k_B*T_part/m_part);
 
   int M = 3;
   double f_M = 0.0;
@@ -264,10 +265,8 @@ void e_excitation(double *part_vx,
 		double *part_vy,
 		double *part_vz,
 		double epsilon_inc,
-		double epsilon_exc,
-		double m_e,
-		double m_n) {
-
+		double epsilon_exc) 
+{
   double R1 = double(rand())/RAND_MAX;
   double R2 = double(rand())/RAND_MAX;
 
@@ -314,9 +313,8 @@ void e_ionization(double *part_vx,
 		double *part_ej_vy,
 		double *part_ej_vz,
 		double epsilon_inc,
-		double epsilon_ion,
-		double m_e,
-		double m_n) {
+		double epsilon_ion)
+{
   double B = 10.0; // for Argon, Vehedi (1994), [eV]
   		   // Might make this an input so other species can use this?
 
@@ -387,5 +385,68 @@ void e_ionization(double *part_vx,
   *part_vy = alpha*v_newy;
   *part_vz = alpha*v_newz;
 
+}
+
+void i_scattering(double *part_vx,
+		double *part_vy,
+		double *part_vz,
+		double epsilon_inc,
+		double m_source,
+		double m_target,
+		double T_target)
+{
+
+  double *part_t_vx, *part_t_vy, *part_t_vz;
+
+  thermalVelSample(part_t_vx, part_t_vy, part_t_vz,
+		   T_target, m_target);
+
+  // Change to reference frame where target is at rest
+  *part_vx -= *part_n_vx;
+  *part_vy -= *part_n_vy;
+  *part_vz -= *part_n_vz;
+
+  // Assumes that source and target are of the same mass
+  // such as Ar and Ar+
+  // DO NOT USE for scattering of different masses
+    double chi = acos(sqrt(1.0-(double(rand())/RAND_MAX)));
+  /* Add this when you figure out what chi is in the case
+   * that m_target =/= m_source
+  double alpha = 2*m_target*m_source*(1.0-cos(theta))/
+	  pow(m_source+m_target,2.0);
+*/
+
+  double phi = 2.0*M_PI*(double (rand())/RAND_MAX);
+
+
+  double v_newx;
+  double v_newy;
+  double v_newz;
+  double v = getv(*part_vx, *part_vy, *part_vz);
+
+  v_newx = (*part_vx)*cos(chi) +
+	   (*part_vy)*v*sin(chi)*sin(phi)/
+	   sqrt(pow(*part_vx,2.0) + pow(*part_vy,2.0)) +  
+	   (*part_vx)*(*part_vz)*sin(chi)*cos(phi)/
+	   sqrt(pow(*part_vx,2.0) + pow(*part_vy,2.0));
+
+  v_newy = (*part_vy)*cos(chi) -
+	   (*part_vx)*v*sin(chi)*sin(phi)/
+	   sqrt(pow(*part_vx,2.0) + pow(*part_vy,2.0)) +  
+	   (*part_vy)*(*part_vz)*sin(chi)*cos(phi)/
+	   sqrt(pow(*part_vx,2.0) + pow(*part_vy,2.0));
+
+  v_newz = (*part_vz)*cos(chi) -
+	   sqrt(pow(*part_vx,2.0) + pow(*part_vy,2.0)) *
+	   sin(chi)*cos(phi);
+
+  *part_vx = alpha*v_newx;
+  *part_vy = alpha*v_newy;
+  *part_vz = alpha*v_newz;
+
+  // Change back to lab frame
+  *part_vx += *part_n_vx;
+  *part_vy += *part_n_vy;
+  *part_vz += *part_n_vz;
 }
 #endif

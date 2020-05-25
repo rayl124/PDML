@@ -86,7 +86,7 @@ int main(void) {
   */
 
   double n_e = 1e13;
-  double n_n = 1e21;
+  double n_n = 1e19;
 
   double part_q;
   double max_epsilon = 0.0;
@@ -104,6 +104,11 @@ int main(void) {
   for (int i = 0; i < np_e; ++i) {
     thermalVelSample(&part_e_vx[i], &part_e_vy[i], &part_e_vz[i],
 		    T_e, m_e);
+    //part_e_vx[i] = part_e_vx[i]*6.0*(double (rand())/RAND_MAX);
+    //part_e_vy[i] = part_e_vy[i]*6.0*(double (rand())/RAND_MAX);
+    //part_e_vz[i] = part_e_vz[i]*6.0*(double (rand())/RAND_MAX);
+
+
     part_e_epsilon[i] = 0.5*m_e*pow(getv(part_e_vx[i], 
 			part_e_vy[i], part_e_vz[i]),2.0)/e; //[eV]
     if (part_e_epsilon[i] > max_epsilon) {
@@ -112,22 +117,106 @@ int main(void) {
     }
   }
   cout << "max_epsilon = " << max_epsilon << endl;
-  double nu_max, N_c;
+  double nu_max, P_max, N_c;
   // Get number of particles for electron - neutral collisions
-  getNullCollPart(CS_energy, e_n_CS, max_epsilon, &nu_max, &N_c,
+  getNullCollPart(CS_energy, e_n_CS, max_epsilon, &nu_max, &P_max, &N_c,
 		  m_e, n_n, dt, np_e, N_coll[0], data_set_length);
 
   cout << "nu_max = " << nu_max << endl;
   cout << "N_c = " << N_c << endl;
-  cout << "P_max = " << N_c/np_e << endl; 
+  cout << "P_max = " << P_max << endl; 
 
   int rand_index;
   int type;
+  double epsilon_exc, epsilon_ion;
+
   for (int i = 0; i < N_c; ++i) {
     rand_index = round((double(rand())/RAND_MAX)*(np_e-1));
     type = getCollType(CS_energy, e_n_CS, part_e_epsilon[rand_index],
 		    nu_max, m_e, n_n, N_coll[0], data_set_length);
     cout << "Particle  = " << rand_index << ", Type = " << type << endl;
+
+    // switch-case for ion-neutral collisions
+    // 0 - elastic
+    // 1 - excitation 1
+    // 2 - excitation 2
+    // 3 - ionization
+    // 4 - null
+    switch(type) {
+      case 0:
+	cout << "Previous velocity: " << part_e_vx[rand_index];
+	cout << ", " << part_e_vy[rand_index] << ", ";
+	cout << part_e_vz[rand_index] << endl;
+	e_elastic(&part_e_vx[rand_index], &part_e_vy[rand_index],
+		  &part_e_vz[rand_index], part_e_epsilon[rand_index],
+		  m_e, m_n);
+        part_e_epsilon[rand_index] = 0.5*m_e*pow(getv(part_e_vx[rand_index], 
+			part_e_vy[rand_index], part_e_vz[rand_index]),2.0)/e; //[eV]
+
+	cout << "New velocity: " << part_e_vx[rand_index];
+	cout << ", " << part_e_vy[rand_index] << ", ";
+	cout << part_e_vz[rand_index] << endl;
+	continue;
+
+      case 1:
+        cout << "Previous velocity: " << part_e_vx[rand_index];
+	cout << ", " << part_e_vy[rand_index] << ", ";
+	cout << part_e_vz[rand_index] << endl;
+
+	epsilon_exc = 1.160330e1; // From crtrs.dat.txt
+	e_excitation(&part_e_vx[rand_index], &part_e_vy[rand_index],
+		  &part_e_vz[rand_index], part_e_epsilon[rand_index], 
+		  epsilon_exc);
+	part_e_epsilon[rand_index] = 0.5*m_e*pow(getv(part_e_vx[rand_index], 
+			part_e_vy[rand_index], part_e_vz[rand_index]),2.0)/e; //[eV]
+	cout << "New velocity: " << part_e_vx[rand_index];
+	cout << ", " << part_e_vy[rand_index] << ", ";
+	cout << part_e_vz[rand_index] << endl;
+	continue;
+
+
+      case 2:
+	cout << "Previous velocity: " << part_e_vx[rand_index];
+	cout << ", " << part_e_vy[rand_index] << ", ";
+	cout << part_e_vz[rand_index] << endl;
+
+	epsilon_exc = 1.31041e1; // From crtrs.dat.txt
+	e_excitation(&part_e_vx[rand_index], &part_e_vy[rand_index],
+		  &part_e_vz[rand_index], part_e_epsilon[rand_index], 
+		  epsilon_exc);
+	part_e_epsilon[rand_index] = 0.5*m_e*pow(getv(part_e_vx[rand_index], 
+			part_e_vy[rand_index], part_e_vz[rand_index]),2.0)/e; //[eV]
+	cout << "New velocity: " << part_e_vx[rand_index];
+	cout << ", " << part_e_vy[rand_index] << ", ";
+	cout << part_e_vz[rand_index] << endl;
+	continue;
+
+
+      case 3:
+	cout << "Previous velocity: " << part_e_vx[rand_index];
+	cout << ", " << part_e_vy[rand_index] << ", ";
+	cout << part_e_vz[rand_index] << endl;np_e += 1;
+	part_e_vx[np_e-1] = 0.0;
+	part_e_vy[np_e-1] = 0.0;
+	part_e_vz[np_e-1] = 0.0;
+	epsilon_ion = 1.60055e1; // From crtrs.dat.txt
+	e_ionization(&part_e_vx[rand_index], &part_e_vy[rand_index],
+		  &part_e_vz[rand_index], &part_e_vx[np_e-1], &part_e_vy[np_e-1],
+		  &part_e_vz[np_e-1], part_e_epsilon[rand_index], 
+		  epsilon_ion);
+	part_e_epsilon[rand_index] = 0.5*m_e*pow(getv(part_e_vx[rand_index], 
+			part_e_vy[rand_index], part_e_vz[rand_index]),2.0)/e; //[eV]
+	part_e_epsilon[np_e-1] = 0.5*m_e*pow(getv(part_e_vx[np_e-1], 
+			part_e_vy[np_e-1], part_e_vz[np_e-1]),2.0)/e; //[eV]
+	cout << "New velocity: " << part_e_vx[rand_index];
+	cout << ", " << part_e_vy[rand_index] << ", ";
+	cout << part_e_vz[rand_index] << endl;
+	continue;
+
+	
+      case 4:
+	continue;
+    }
   }
    
   delete(part_e_x);
