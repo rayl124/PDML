@@ -11,3 +11,6 @@ interpolate_test: interpolate_test.cc
 
 collision_test: collision_test.cc collisionModules.h
 	$(CC) -g -o collision_test collision_test.cc -lm
+
+1D_CCP: 1D_CCP.cc
+	$(CC) -g -o 1D_CCP 1D_CCP.cc -lm

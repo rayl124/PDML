@@ -402,9 +402,9 @@ void i_scattering(double *part_vx,
 		   T_target, m_target);
 
   // Change to reference frame where target is at rest
-  *part_vx -= *part_n_vx;
-  *part_vy -= *part_n_vy;
-  *part_vz -= *part_n_vz;
+  *part_vx -= *part_t_vx;
+  *part_vy -= *part_t_vy;
+  *part_vz -= *part_t_vz;
 
   // Assumes that source and target are of the same mass
   // such as Ar and Ar+
@@ -415,7 +415,7 @@ void i_scattering(double *part_vx,
   double alpha = 2*m_target*m_source*(1.0-cos(theta))/
 	  pow(m_source+m_target,2.0);
 */
-
+  double alpha = sin(chi)*sin(chi);
   double phi = 2.0*M_PI*(double (rand())/RAND_MAX);
 
 
@@ -445,8 +445,8 @@ void i_scattering(double *part_vx,
   *part_vz = alpha*v_newz;
 
   // Change back to lab frame
-  *part_vx += *part_n_vx;
-  *part_vy += *part_n_vy;
-  *part_vz += *part_n_vz;
+  *part_vx += *part_t_vx;
+  *part_vy += *part_t_vy;
+  *part_vz += *part_t_vz;
 }
 #endif
