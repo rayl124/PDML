@@ -58,7 +58,8 @@ void jacobi_Update(double *phi,
 		const double q,
 		const double epsilon0,
 		const double k,
-		const double Te) {
+		const double Te,
+		int global_iter) {
 
   double *phi_new = new double[nx1*nx2];
   double *RHS0 = new double[nx1*nx2];
@@ -75,12 +76,13 @@ void jacobi_Update(double *phi,
   
   while (jacobi_iter <= jacobi_max_iter) {
     ++jacobi_iter;
-    residual = 0.0;
 
-    if (jacobi_iter%1000 == 0) {
+    if (jacobi_iter%10000 == 0) {
       std::cout << "Jacobi iter = " << jacobi_iter << std::endl;
+      cout << "Resid = " << residual << std::endl;
     }
 
+    
     // Update RHS term to include electron terms
     for (int i = 0; i < nx1; ++i) {
       for (int j = 0; j < nx2; ++j) {
@@ -89,7 +91,20 @@ void jacobi_Update(double *phi,
 	RHS[ij_to_index(i, j, nx2)] = -q*RHS[ij_to_index(i, j, nx2)]/epsilon0;
       }
     }
-
+    
+    for (int i = 0; i < nx1; ++i) {
+      RHS[ij_to_index(i,0,nx2)] = 0.0;
+      RHS[ij_to_index(i, nx2-1, nx2)] = 0.0;
+    }
+    for (int j = 0; j < nx2; ++j) {
+      RHS[ij_to_index(nx1-1, j, nx2)] = 0.0;
+      RHS[ij_to_index(0, j, nx2)] = phi0;
+    }
+    for (int i = box_range[0]; i <= box_range[1]; ++i) {
+      for (int j = box_range[2]; j <= box_range[3]; ++j) {
+          RHS[ij_to_index(i, j, nx2)] = phi[ij_to_index(i, j, nx2)];
+      }
+    } 
     scale = 1.0/(2.0/(dx1*dx1)+2.0/(dx2*dx2));
     // Run Jacobi update for interior nodes
     for (int i = 1; i < nx1 - 2; ++i) {
@@ -162,9 +177,12 @@ void jacobi_Update(double *phi,
     // Corners
     scale = 1.0/(1.0/(dx1*dx1) + 1.0/(dx2*dx2));
     phi_new[ij_to_index(nx1-2, nx2-2, nx2)] = (phi[ij_to_index(nx1-3, nx2-2, nx2)]/(dx1*dx1) +
-  		  			  phi[ij_to_index(nx1-2, nx2-3, nx2)]/(dx2*dx2))*scale;
+  		  			  phi[ij_to_index(nx1-2, nx2-3, nx2)]/(dx2*dx2) -
+					  RHS[ij_to_index(nx1-2,nx2-2,nx2)])*scale;
+    
     phi_new[ij_to_index(nx1-2, 1, nx2)] = (phi[ij_to_index(nx1-3, 1, nx2)]/(dx1*dx1) +
-		  			  phi[ij_to_index(nx1-2, 2, nx2)]/(dx2*dx2))*scale;
+		  			  phi[ij_to_index(nx1-2, 2, nx2)]/(dx2*dx2) -
+					  RHS[ij_to_index(nx1-2, 1, nx2)])*scale;
 
     phi_new[ij_to_index(nx1-1, nx2-2, nx2)] = phi_new[ij_to_index(nx1-2, nx2-2, nx2)];
     phi_new[ij_to_index(nx1-2, nx2-1, nx2)] = phi_new[ij_to_index(nx1-2, nx2-2, nx2)];
@@ -174,6 +192,7 @@ void jacobi_Update(double *phi,
     phi_new[ij_to_index(nx1-1, 0, nx2)] = phi_new[ij_to_index(nx1-2, 1, nx2)];
 
 
+    residual = 0.0;
     // Calculate the residual
     for (int i = 0; i < nx1; ++i) {
       for (int j = 0; j < nx2; ++j) {
@@ -181,7 +200,6 @@ void jacobi_Update(double *phi,
         residual += pow(phi_new[index_ij] - phi[index_ij], 2.0);
       }
     }
-    
     residual = sqrt(residual);
     // Update phi to be phi_new
     copy_n(phi_new, nx1*nx2, phi);
@@ -221,7 +239,7 @@ int main(void) {
 
   // Plasma parameters
   // ******************DOUBLE CHECK THESE FORMULAS*********
-  double lambdaD = sqrt(epsilon0*k*Te/(q*q*n0));
+  double lambdaD = sqrt(epsilon0*Te/(q*n0));
   double vth = sqrt(2.0 * q * Ti/M);
 
   // Problem discretization
@@ -262,8 +280,8 @@ int main(void) {
 
   // Electric potential
   double *RHS = new double[nn];
-  int jacobi_max_iter = 1e5;
-  double tol = 1.0e-4;
+  int jacobi_max_iter = 1e6;
+  double tol = 1.0e-6;
   int index_ij;
 
   // Electric field
@@ -315,6 +333,10 @@ int main(void) {
       RHS[i] = 0.0;
     }
     
+    if (iter == 24) {
+    cout << "Might fail" << endl;
+    }
+
     cout << "Iter: " << iter << endl;
     cout << "Computing ion charge density..." << endl;
     //Compute ion charge density 
@@ -355,7 +377,7 @@ int main(void) {
     
     ////////////////////////////////
     jacobi_Update(phi, RHS, box_range, dh, dh, nx1, nx2, jacobi_max_iter, tol,
-		    n0, phi0, q, epsilon0, k, Te);
+		    n0, phi0, q, epsilon0, k, Te, iter);
 
     cout << "Computing electric field..." << endl;
     // Compute electric field
@@ -425,11 +447,12 @@ int main(void) {
     ///////////////////////////////////////////
     // Uses same weights as charge density
     for (int p = 0; p < np; ++p) {      
+      
+      get_Weights(&x_part[2*p], weights, &node_index[2*p], dh);
+      
       int i = node_index[2*p];
       int j = node_index[2*p+1];
-
-      get_Weights(&x_part[2*p], weights, &node_index[2*p], dh);
-
+      
       E_part[0] = E_field[2*ij_to_index(i, j, nx2)]*weights[0] +
 	          E_field[2*ij_to_index(i + 1, j, nx2)]*weights[1] +
 		  E_field[2*ij_to_index(i, j + 1, nx2)]*weights[2] +
@@ -489,7 +512,7 @@ int main(void) {
     cout << "End of iteration, np = " << np << endl << endl;
     
     // Output info
-    if ((iter+1)%25 == 0) {
+    if ((iter)%25 == 0 || iter == 22) {
       for (int i = 0; i < nn; ++i) {
         DataFile << iter << " " << rho[i] << " " << phi[i] << " " << E_field[2*i] << " ";
 	DataFile << E_field[2*i + 1] << endl;
