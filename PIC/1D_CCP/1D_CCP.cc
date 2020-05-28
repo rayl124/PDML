@@ -159,11 +159,11 @@ int main(void) {
   double *rho = new double[nn]; // Density at each node
 
   // Electric potential
-  int nn_inner = elec_range[2] - elec_range[1] - 1;
+  int nn_inner = elec_range[2] - elec_range[1] - 1; // Interior nodes
   double *RHS = new double[nn];
-  double *a = new double[nn_inner + 1];
-  double *b = new double[nn_inner + 1];
-  double *c = new double[nn_inner + 1];
+  double *a = new double[nn_inner];
+  double *b = new double[nn_inner];
+  double *c = new double[nn_inner];
 
   // Electric field
   double *E_field = new double[nn];
@@ -173,9 +173,10 @@ int main(void) {
   
   // Set up phi boundaries and initial values
   double *phi = new double[nn];
-  double *phi_cc = new double[nn-1];
-  double *l_coeff = new double[3];
+  //double *phi_cc = new double[nn-1];
+  //double *l_coeff = new double[3];
   double t;
+  /* Cell-centered discretization
   double *x_cc_left = new double[3];
   double *x_cc_right = new double[3];
   x_cc_left[0] = -0.5*dx;
@@ -184,17 +185,19 @@ int main(void) {
   x_cc_right[0] = (0.075)-1.5*dx;
   x_cc_right[1] = 0.075-0.5*dx;
   x_cc_right[2] = 0.075+0.5*dx;
+  */ 
 
   // Set up exact solution;
   double *phi_exact = new double[nn];
-  double *phi_cc_exact = new double[nn-1];
+  //double *phi_cc_exact = new double[nn-1];
   for (int i = 0; i < nn; ++i) {
      phi[i] = 0.0;
      phi_exact[i] = 0.0;
+     /*
      if (i < nn-1) {
        phi_cc[i] = 0.0;
        phi_cc_exact[i] = 0.0;
-     }
+     } */
   }
   //
  
@@ -208,7 +211,7 @@ int main(void) {
   //ofstream ElectronFile("Results/ElectronInfo.txt");
   //ofstream IonFile("Results/NumParticles.txt");
 
-  FieldFile << "Iteration / Ion Density / Electric Potential /";
+  FieldFile << "Iteration / Node x / Electric Potential /";
   FieldFile << "Electric Field" << endl;
 
   //ParticleFile << "Iteration / x / v / spwt / q";
@@ -242,6 +245,7 @@ int main(void) {
 	phi_exact[i] = (phi_right-phi_left)/(L_inner)*(dx*i-(elec_range[1]*dx)) 
 		+ phi_left;
       }
+      /*
 
       if (i >=elec_range[0] && i <= elec_range[1]-1) {
         phi_cc_exact[i] = phi_left;
@@ -250,7 +254,7 @@ int main(void) {
       } else {
 	phi_cc_exact[i] = (phi_right-phi_left)/(L_inner)*(dx*(i+0.5)-(elec_range[1]*dx)) 
 		+ phi_left;
-      }
+      }*/
     }
     
     cout << "Iter: " << iter << endl;
@@ -302,21 +306,21 @@ int main(void) {
     cout << "Computing electric potential..." << endl;
     for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
       phi[i] = phi_left;
-      if (i < elec_range[1]) {
-        phi_cc[i] = phi_left;
-      }
+      /*if (i < elec_range[1]) {
+        /phi_cc[i] = phi_left;
+      }*/
     }
     for (int i = elec_range[2]; i <= elec_range[3]; ++i) {
       phi[i] = phi_right;
-      if (i < elec_range[3]) {
-        phi_cc[i] = phi_right;
-      }
+      /*if (i < elec_range[3]) {
+        /phi_cc[i] = phi_right;
+      }*/
     }
     
     RHS[elec_range[1] + 1] -= phi_left/(dx*dx);
     RHS[elec_range[2] - 1] -= phi_right/(dx*dx);
 
-    for (int i = 0; i < nn_inner + 1; ++i) {
+    for (int i = 0; i < nn_inner; ++i) {
       a[i] = 1.0;
       b[i] = -2.0;
       c[i] = 1.0;
@@ -325,10 +329,11 @@ int main(void) {
     a[0] = 0.0;
     c[nn_inner-1] = 0.0;
     
-    
     triDiagSolver(&phi[elec_range[1] + 1], a, b, c, 
 		    &RHS[elec_range[1] + 1], nn_inner);
-    
+
+    // Cell Centered
+    /*
     c[nn_inner-1] = 1.0;
     c[nn_inner] = 0.0;
 
@@ -353,6 +358,7 @@ int main(void) {
 
     triDiagSolver(&phi_cc[elec_range[1]], a, b, c, 
 		    &RHS[elec_range[1]], nn_inner + 1);
+    */
 
 
     
@@ -364,13 +370,14 @@ int main(void) {
     
     cout << "Computing electric field..." << endl;
 
+    // Finite difference accuracy 2 order
     for (int i = 0; i < nn; ++i) {
       // Left
       if (i == 0) {
-	E_field[i] = -(phi[1] - phi[0])/dx;
+	E_field[i] = -(-0.5*phi[2] + 2.0*phi[1] - 1.5*phi[0])/dx;
       } // Right
       else if (i == nn-1) {
-	E_field[i] = -(phi[i] -  phi[i-1])/dx;
+	E_field[i] = -(0.5*phi[i-2] -2.0*phi[i-1] + 1.5*phi[i])/dx;
       }
       else {
 	E_field[i] = -(phi[i+1] - phi[i-1])/(2.0*dx);
@@ -545,12 +552,8 @@ int main(void) {
 
     if ((iter+1)%5 == 0) {
       for (int i = 0; i < nn; ++i) {
-        FieldFile << iter << " " << rho[i] << " " << phi[i] << " " << phi_exact[i];
-	if (i < nn-1) {
-	  FieldFile << " " << phi_cc[i] << " " << phi_cc_exact[i] << endl;
-	} else {
-	  FieldFile << endl;
-	}
+        FieldFile << iter << " " << dx*i << " " << phi[i] << " ";
+	FieldFile << E_field[i] << endl;
       }
       /*
       for (int i = 0; i < electron.np; ++i) {
