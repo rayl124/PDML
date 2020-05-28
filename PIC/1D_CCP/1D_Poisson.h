@@ -76,45 +76,24 @@ void jacobi_Update(double *phi,
 
 // Solves a tridiagonal matrix
 void triDiagSolver(double *phi,
-		double *RHS,
-		int *elec_range,
-		double phi_left,
-		double phi_right,
-		double dx,
-		int nn) {
- 
-  // Add dirichlet boundaries
-  for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
-    phi[i] = phi_left;
-  }
-
-  for (int i = elec_range[2]; i <= elec_range[3]; ++i) {
-    phi[i] = phi_right;
-  }
-  
-  // Central finite difference for triag diagonal
-  double a = 1.0;
-  double b = -2.0;
-  double c = 1.0;
+		double *a, double *b, double *c,
+		double *RHS, int nn) {
  
   double *c_prime = new double[nn];
   double *d_prime = new double[nn];
-  
-  RHS[elec_range[1] + 1] -= phi_left/(dx*dx);
-  RHS[elec_range[2] - 1] -= phi_right/(dx*dx);;
 
-  for (int i = elec_range[1] + 1; i < elec_range[2]; ++i) {
-    RHS[i] *= dx*dx;
-    if (i == (elec_range[1] + 1)) {
-      c_prime[i] = c/b;
-      d_prime[i] = RHS[i]/b;
+  for (int i = 0; i < nn; ++i) {
+    if (i == (0)) {
+      c_prime[i] = c[i]/b[i];
+      d_prime[i] = RHS[i]/b[i];
     } else {
-      c_prime[i] = c/(b-a*c_prime[i-1]);
-      d_prime[i] = (RHS[i] - a*d_prime[i-1])/(b - a*c_prime[i-1]);
+      c_prime[i] = c[i]/(b[i]-a[i]*c_prime[i-1]);
+      d_prime[i] = (RHS[i] - a[i]*d_prime[i-1])/
+	      (b[i] - a[i]*c_prime[i-1]);
     }
   }
-  for (int i = elec_range[2] - 1; i > elec_range[1]; --i) {
-    if (i == (elec_range[2] - 1)) {
+  for (int i = nn - 1; i > -1; --i) {
+    if (i == (nn-1)) {
       phi[i] = d_prime[i];
     } else {
       phi[i] = d_prime[i] - c_prime[i]*phi[i+1];

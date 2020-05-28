@@ -21,6 +21,19 @@ weights[0] = 1 - hx;
 weights[1] = hx;
 }
 
+void legendrePoly(double x_target, double *x, 
+		double *l_coeff, int order) {
+
+  for (int j = 0; j < order; j++) {
+    l_coeff[j] = 1.0;
+    for (int k = 0; k < order; ++k) {
+      if (j!=k) {
+	l_coeff[j] *= (x_target-x[k])/(x[j]-x[k]);
+      }
+    }
+  }
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 //                                                                    //
@@ -45,8 +58,8 @@ int main(void) {
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
-  int ts = 4e6; // # of time steps
-  double dx = 5.0e-4; // length of each cell
+  int ts = 200; // # of time steps
+  double dx= 5.0e-4; // length of each cell
   double dt = 1.0/(27.12e6*200.0); 
   double L = 0.095; // Domain length m
 
@@ -63,6 +76,7 @@ int main(void) {
   double V_lf = 281.9; // V
   double phi_left;
   double phi_right = 0.0;
+  double L_inner = 0.085-0.01;
 
   //////////////////////////////////////////////////////////////
   //
@@ -112,18 +126,24 @@ int main(void) {
   int max_part = 1e6; // max_particles if none leave during time history
 
   // Electron particle data
-  species electron(max_part);
+  species electron;
+  electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
+  electron.np = 0;
 
   // Ion particle data
-  species ion(max_part);
+  species ion;
+  ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
+  ion.np = 0;
+
   double m_n = ion.m;
 
   // Calculate collisions setup
-  double max_index, nu_max, P_max, N_c;
+  double max_index, nu_max, P_max;
+  int N_c = 0;
   int rand_index, type;
   double epsilon_exc, epsilon_ion;
 
@@ -139,7 +159,11 @@ int main(void) {
   double *rho = new double[nn]; // Density at each node
 
   // Electric potential
+  int nn_inner = elec_range[2] - elec_range[1] - 1;
   double *RHS = new double[nn];
+  double *a = new double[nn_inner + 1];
+  double *b = new double[nn_inner + 1];
+  double *c = new double[nn_inner + 1];
 
   // Electric field
   double *E_field = new double[nn];
@@ -149,11 +173,30 @@ int main(void) {
   
   // Set up phi boundaries and initial values
   double *phi = new double[nn];
+  double *phi_cc = new double[nn-1];
+  double *l_coeff = new double[3];
   double t;
+  double *x_cc_left = new double[3];
+  double *x_cc_right = new double[3];
+  x_cc_left[0] = -0.5*dx;
+  x_cc_left[1] = 0.5*dx;
+  x_cc_left[2] = 1.5*dx;
+  x_cc_right[0] = (0.075)-1.5*dx;
+  x_cc_right[1] = 0.075-0.5*dx;
+  x_cc_right[2] = 0.075+0.5*dx;
 
+  // Set up exact solution;
+  double *phi_exact = new double[nn];
+  double *phi_cc_exact = new double[nn-1];
   for (int i = 0; i < nn; ++i) {
      phi[i] = 0.0;
+     phi_exact[i] = 0.0;
+     if (i < nn-1) {
+       phi_cc[i] = 0.0;
+       phi_cc_exact[i] = 0.0;
+     }
   }
+  //
  
   //////////////////////////////////////////////////////////
   //
@@ -184,13 +227,30 @@ int main(void) {
     t = iter*dt;
     phi_left = V_hf*sin(2*M_PI*f_hf*t) +  
 	    V_lf*sin(2*M_PI*f_lf*t);
-
     // Reset variables
     
     for (int i = 0; i< nn; ++i) {
       rho[i] = 0.0;
       E_field[i] = 0.0;
       RHS[i] = 0.0;
+      
+      if (i >=elec_range[0] && i <= elec_range[1]) {
+        phi_exact[i] = phi_left;
+      } else if (i >= elec_range[2] && i <= elec_range[3]) {
+	phi_exact[i] = phi_right;
+      } else {
+	phi_exact[i] = (phi_right-phi_left)/(L_inner)*(dx*i-(elec_range[1]*dx)) 
+		+ phi_left;
+      }
+
+      if (i >=elec_range[0] && i <= elec_range[1]-1) {
+        phi_cc_exact[i] = phi_left;
+      } else if (i >= elec_range[2] && i <= elec_range[3]) {
+	phi_cc_exact[i] = phi_right;
+      } else {
+	phi_cc_exact[i] = (phi_right-phi_left)/(L_inner)*(dx*(i+0.5)-(elec_range[1]*dx)) 
+		+ phi_left;
+      }
     }
     
     cout << "Iter: " << iter << endl;
@@ -240,10 +300,63 @@ int main(void) {
     /////////////////////////////////////////////////
 
     cout << "Computing electric potential..." << endl;
+    for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
+      phi[i] = phi_left;
+      if (i < elec_range[1]) {
+        phi_cc[i] = phi_left;
+      }
+    }
+    for (int i = elec_range[2]; i <= elec_range[3]; ++i) {
+      phi[i] = phi_right;
+      if (i < elec_range[3]) {
+        phi_cc[i] = phi_right;
+      }
+    }
     
-    triDiagSolver(phi, RHS, elec_range, phi_left, phi_right, dx, nn);
+    RHS[elec_range[1] + 1] -= phi_left/(dx*dx);
+    RHS[elec_range[2] - 1] -= phi_right/(dx*dx);
 
-    /////////////////////////////////////////////////
+    for (int i = 0; i < nn_inner + 1; ++i) {
+      a[i] = 1.0;
+      b[i] = -2.0;
+      c[i] = 1.0;
+      RHS[i] *= dx*dx;
+    }
+    a[0] = 0.0;
+    c[nn_inner-1] = 0.0;
+    
+    
+    triDiagSolver(&phi[elec_range[1] + 1], a, b, c, 
+		    &RHS[elec_range[1] + 1], nn_inner);
+    
+    c[nn_inner-1] = 1.0;
+    c[nn_inner] = 0.0;
+
+    legendrePoly(0.0, x_cc_left, l_coeff, 3);
+    b[0] -= l_coeff[1]/l_coeff[0];
+    c[0] -= l_coeff[2]/l_coeff[0];
+
+    for (int i = 0; i < nn; ++i) {
+      RHS[i] = 0.0;
+    }
+
+    RHS[elec_range[1]] -= phi_left/(dx*dx*l_coeff[0]);
+
+    legendrePoly(0.075, x_cc_right, l_coeff, 3);
+    b[nn_inner] -= l_coeff[1]/l_coeff[2];
+    a[nn_inner] -= l_coeff[0]/l_coeff[2];
+    RHS[elec_range[2] - 1] -= phi_right/(dx*dx*l_coeff[2]);
+
+    for (int i = 0; i < nn; ++i) {
+      RHS[i] *= dx*dx;
+    }
+
+    triDiagSolver(&phi_cc[elec_range[1]], a, b, c, 
+		    &RHS[elec_range[1]], nn_inner + 1);
+
+
+    
+     /////////////////////////////////////////////////
     //
     // Compute electric field
     //
@@ -318,11 +431,12 @@ int main(void) {
     cout << "Calculating collisions..." << endl;
 
     // Get number of particles for electron - neutral collisions
+    if (electron.np > 0) {
     getNullCollPart(CS_energy, e_n_CS, electron.max_epsilon, 
 		  &nu_max, &P_max, &N_c,
 		  electron.m, n_n, dt, electron.np, 
 		  N_coll[0], data_set_length);
-
+    }
 
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(electron.np-1));
@@ -386,9 +500,10 @@ int main(void) {
     }
     
     // Ion-neutral collisions
+    if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
 		  ion.m, n_n, dt, ion.np, N_coll[1], data_set_length);
-
+    }
 
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(ion.np-1));
@@ -428,10 +543,14 @@ int main(void) {
     //
     ////////////////////////////////////////////////////
 
-    if ((iter+1)%25 == 0) {
+    if ((iter+1)%5 == 0) {
       for (int i = 0; i < nn; ++i) {
-        FieldFile << iter << " " << rho[i] << " " << phi[i] << " " << E_field[i];
-	FieldFile << endl;
+        FieldFile << iter << " " << rho[i] << " " << phi[i] << " " << phi_exact[i];
+	if (i < nn-1) {
+	  FieldFile << " " << phi_cc[i] << " " << phi_cc_exact[i] << endl;
+	} else {
+	  FieldFile << endl;
+	}
       }
       /*
       for (int i = 0; i < electron.np; ++i) {
@@ -455,6 +574,7 @@ int main(void) {
   delete(RHS);
   delete(E_field);
   delete(phi);
+  delete(phi_exact);
   
   electron.clean();
   ion.clean();

@@ -95,7 +95,7 @@ double getv(double vx, double vy, double vz) {
 void getNullCollPart(double *CS_energy,
 		     double *CS_data,
 		     double epsilon_max,
-		     double *nu_max, double *P_max, double *N_c,
+		     double *nu_max, double *P_max, int *N_c,
 		     double m_source, double n_target, 
 		     double dt, double np,
 		     int N_coll, int data_set_length) {
