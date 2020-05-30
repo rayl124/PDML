@@ -16,7 +16,7 @@ void get_Weights(double part_x,
 		 double dx) {
 
 *node_index = floor(part_x/dx);
-double hx = (part_x -  (*node_index) * hx)/dx;
+double hx = (part_x -  (*node_index) * dx)/dx;
 weights[0] = 1 - hx;
 weights[1] = hx;
 }
@@ -54,7 +54,7 @@ int main(void) {
   // Input settings
   double phi0 = 0.0; // Reference potential
   double T_n = 300; // Neutral temp, [K]
-  double n_n = 0;
+  double n_n = 6.5e14; // Neutral number density, 
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
@@ -123,21 +123,38 @@ int main(void) {
   // Particle variables
   //
   // //////////////////////////////////////////////////////////
-  int max_part = 1e6; // max_particles if none leave during time history
+  int max_part = 4e6; // max_particles if none leave during time history
 
   // Electron particle data
   species electron;
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 0;
+  electron.np = 1e4;
+  electron.T = 300.0; //[K]
+  electron.spwt = 1e4;
 
   // Ion particle data
   species ion;
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 0;
+  ion.np = 1e4;
+  ion.T = 300.0; //[K]
+  ion.spwt = 1e4;
+
+  for (int i = 0; i < electron.np; ++i) {
+    electron.x[i] = double(rand())/RAND_MAX*(elec_range[2]-elec_range[1])*dx + 
+	    elec_range[1]*dx;
+    electron.thermalVelocity(i);
+  }
+
+  for (int i = 0; i < ion.np; ++i) {
+    ion.x[i] = double(rand())/RAND_MAX*(elec_range[2]-elec_range[1])*dx + 
+	    elec_range[1]*dx;
+    ion.thermalVelocity(i);
+  }
+
 
   double m_n = ion.m;
 
@@ -207,12 +224,12 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
-  ofstream FieldFile("Results/ESFieldData.txt");
+  ofstream FieldFile("Results/ESFieldData002.txt");
   //ofstream ElectronFile("Results/ElectronInfo.txt");
   //ofstream IonFile("Results/NumParticles.txt");
 
-  FieldFile << "Iteration / Node x / Electric Potential /";
-  FieldFile << "Electric Field" << endl;
+  FieldFile << "Iteration / Node x / Charge Density ";
+  FieldFile << "Electric Potential / Electric Field" << endl;
 
   //ParticleFile << "Iteration / x / v / spwt / q";
   //ParticleFile << endl;
@@ -236,6 +253,8 @@ int main(void) {
       rho[i] = 0.0;
       E_field[i] = 0.0;
       RHS[i] = 0.0;
+      electron.max_epsilon = 0.0;
+      ion.max_epsilon = 0.0;
       
       if (i >=elec_range[0] && i <= elec_range[1]) {
         phi_exact[i] = phi_left;
@@ -272,17 +291,17 @@ int main(void) {
     for (int p = 0; p < electron.np; ++p) {
       get_Weights(electron.x[p], weights, &electron.node_index[p], dx);
 
-      rho[electron.node_index[p]] += electron.spwt[p]*
+      rho[electron.node_index[p]] += electron.spwt*
 	      			     (electron.q)*weights[0];
-      rho[electron.node_index[p]+1] += electron.spwt[p]*
+      rho[electron.node_index[p]+1] += electron.spwt*
 	      			       (electron.q)*weights[1];
     }
     // Ions
     for (int p = 0; p < ion.np; ++p) {
       get_Weights(ion.x[p], weights, &ion.node_index[p], dx);
 
-      rho[ion.node_index[p]] += ion.spwt[p]*ion.q*weights[0];
-      rho[ion.node_index[p]+1] += ion.spwt[p]*ion.q*weights[1];
+      rho[ion.node_index[p]] += ion.spwt*ion.q*weights[0];
+      rho[ion.node_index[p]+1] += ion.spwt*ion.q*weights[1];
     }
 
     // Account for volume
@@ -406,7 +425,11 @@ int main(void) {
       electron.epsilon[p] = 0.5*electron.m*pow(getv(electron.vx[p], 
 			      electron.vy[p], electron.vz[p]),2.0)/e;
 
-      if (electron.epsilon[p] > electron.max_epsilon) {
+      if (electron.x[p] < elec_range[1]*dx ||
+	  electron.x[p] > elec_range[2]*dx) {
+	electron.remove_part(p);
+	--p;
+      } else if (electron.epsilon[p] > electron.max_epsilon) {
         electron.max_epsilon = electron.epsilon[p];
       }
     }
@@ -420,10 +443,16 @@ int main(void) {
 	      	       part_E*dt;
       ion.x[p] = ion.x[p] + ion.vx[p]*dt;
 
+
       ion.epsilon[p] = 0.5*ion.m*pow(getv(ion.vx[p], 
 			      ion.vy[p], ion.vz[p]),2.0)/e;
 
-      if (ion.epsilon[p] > ion.max_epsilon) {
+ 
+      if (ion.x[p] < elec_range[1]*dx ||
+	  ion.x[p] > elec_range[2]*dx) {
+	ion.remove_part(p);
+	--p;
+      } else if (ion.epsilon[p] > ion.max_epsilon) {
         ion.max_epsilon = ion.epsilon[p];
       }
     }
@@ -438,12 +467,18 @@ int main(void) {
     cout << "Calculating collisions..." << endl;
 
     // Get number of particles for electron - neutral collisions
+    cout << "Max_epsilon" << electron.max_epsilon << endl;
     if (electron.np > 0) {
     getNullCollPart(CS_energy, e_n_CS, electron.max_epsilon, 
 		  &nu_max, &P_max, &N_c,
 		  electron.m, n_n, dt, electron.np, 
 		  N_coll[0], data_set_length);
+    } else {
+      nu_max = 0.0;
+      N_c = 0;
     }
+    cout << "N_c = " << N_c << endl;
+    cout << "nu_max = " << nu_max<<endl;
 
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(electron.np-1));
@@ -510,7 +545,11 @@ int main(void) {
     if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
 		  ion.m, n_n, dt, ion.np, N_coll[1], data_set_length);
+    }  else {
+      nu_max = 0.0;
+      N_c = 0;
     }
+
 
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(ion.np-1));
@@ -542,7 +581,8 @@ int main(void) {
     }
 
 
-    //cout << "End of iteration, np = " << np << endl << endl;
+    cout << "End of iteration, electron.np = " << electron.np << endl;
+    cout << "ion.np = " << ion.np << endl;
 
     ////////////////////////////////////////////////////
     //
@@ -552,8 +592,8 @@ int main(void) {
 
     if ((iter+1)%5 == 0) {
       for (int i = 0; i < nn; ++i) {
-        FieldFile << iter << " " << dx*i << " " << phi[i] << " ";
-	FieldFile << E_field[i] << endl;
+        FieldFile << iter << " " << dx*i << " " << rho[i] << " " << phi[i] << " ";
+	FieldFile << E_field[i] << " "  << endl;
       }
       /*
       for (int i = 0; i < electron.np; ++i) {

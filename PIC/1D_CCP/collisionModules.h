@@ -20,7 +20,10 @@
   int guess = round((data_set_length - 1)/2.0);
   int a = 0;
   int b = data_set_length - 1;
-
+  
+  //if (target == data_set[0]) {
+    //return 0;
+  //}
   if (target > data_set[data_set_length-1]) {
     return data_set_length-1;
   }
@@ -59,6 +62,7 @@ double linInterp(double target_x,
 		double y1, double y2) {
   return (y2-y1)*(target_x - x1)/(x2-x1) + y1;
 }
+
 
 double getP(double epsilon,
 	    double sigma,
