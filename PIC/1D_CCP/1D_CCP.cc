@@ -54,7 +54,7 @@ int main(void) {
   // Input settings
   double phi0 = 0.0; // Reference potential
   double T_n = 300; // Neutral temp, [K]
-  double n_n = 6.5e14; // Neutral number density, 
+  double n_n = 6.5e18; // Neutral number density, 
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
@@ -130,7 +130,7 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e4;
+  electron.np = 1e6;
   electron.T = 300.0; //[K]
   electron.spwt = 1e4;
 
@@ -139,7 +139,7 @@ int main(void) {
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e4;
+  ion.np = 1e6;
   ion.T = 300.0; //[K]
   ion.spwt = 1e4;
 
@@ -224,17 +224,16 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
-  ofstream FieldFile("Results/ESFieldData002.txt");
-  //ofstream ElectronFile("Results/ElectronInfo.txt");
-  //ofstream IonFile("Results/NumParticles.txt");
+  ofstream FieldFile("Results/ESFieldData001.txt");
+  ofstream NumFile("Results/NumberPart001.txt");
 
-  FieldFile << "Iteration / Node x / Charge Density ";
+  FieldFile << "Iteration / Node x / Charge Density / ";
   FieldFile << "Electric Potential / Electric Field" << endl;
 
   //ParticleFile << "Iteration / x / v / spwt / q";
   //ParticleFile << endl;
 
-  //NumFile << "Iteration / Number of Macroparticles" << endl;
+  NumFile << "Iteration / Electron np / Ion np" << endl;
   
   //////////////////////////////////////////////////////////
   //
@@ -467,12 +466,13 @@ int main(void) {
     cout << "Calculating collisions..." << endl;
 
     // Get number of particles for electron - neutral collisions
-    cout << "Max_epsilon" << electron.max_epsilon << endl;
+    //cout << "Max_epsilon" << electron.max_epsilon << endl;
     if (electron.np > 0) {
     getNullCollPart(CS_energy, e_n_CS, electron.max_epsilon, 
 		  &nu_max, &P_max, &N_c,
 		  electron.m, n_n, dt, electron.np, 
 		  N_coll[0], data_set_length);
+    nu_max *= 1.5; // Padding
     } else {
       nu_max = 0.0;
       N_c = 0;
@@ -520,6 +520,7 @@ int main(void) {
 		  electron.vz[rand_index]),2.0)/e;
 	  continue;
         case 3:
+	  cout << "Electron ejected" << endl;
 	  electron.np += 1;
 	  electron.x[electron.np-1] = 0.0;
 	  electron.x[electron.np-1] = 0.0;
@@ -545,6 +546,7 @@ int main(void) {
     if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
 		  ion.m, n_n, dt, ion.np, N_coll[1], data_set_length);
+    nu_max *= 2.0; //Buffer padding
     }  else {
       nu_max = 0.0;
       N_c = 0;
@@ -602,9 +604,9 @@ int main(void) {
       }
       for (int i = 0; i < ion.np; ++i) {
 
-      }
-      NumFile << iter << " " << np << endl;
-      */
+      } */
+      NumFile << iter << " " << electron.np << " " << ion.np << endl;
+     
     }
   }
   delete(elec_range);
