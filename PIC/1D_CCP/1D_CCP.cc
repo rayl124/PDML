@@ -131,7 +131,7 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e5;
+  electron.np = 1e6;
   electron.T = 300.0; //[K]
   electron.spwt = 1e14/electron.np;
   electron.gamma[0] = 0.2;;
@@ -141,7 +141,7 @@ int main(void) {
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e5;
+  ion.np = 1e6;
   ion.T = 300.0; //[K]
   ion.spwt = 1e14/electron.np;
   ion.gamma[1] = 0.15;
@@ -229,8 +229,8 @@ int main(void) {
   
   //char simNum = "001";
 
-  ofstream FieldFile("Results/ESFieldData001.txt");
-  ofstream NumFile("Results/NumberPart001.txt");
+  ofstream FieldFile("Results/ESFieldData002.txt");
+  ofstream NumFile("Results/NumberPart002.txt");
 
   FieldFile << "Iteration / Node x / Charge Density / ";
   FieldFile << "Electric Potential / Electric Field" << endl;
@@ -509,7 +509,7 @@ int main(void) {
 		  &nu_max, &P_max, &N_c,
 		  electron.m, n_n, dt, electron.np, 
 		  N_coll[0], data_set_length);
-    nu_max *= 1.5; // Padding
+    nu_max *= 3.0; // Padding
     } else {
       nu_max = 0.0;
       N_c = 0;
@@ -557,7 +557,7 @@ int main(void) {
 		  electron.vz[rand_index]),2.0)/e;
 	  continue;
         case 3:
-	  cout << "Electron ejected" << endl;
+	  //cout << "Electron ejected" << endl;
 	  electron.np += 1;
 	  electron.x[electron.np-1] = 0.0;
 	  electron.x[electron.np-1] = 0.0;
@@ -583,7 +583,7 @@ int main(void) {
     if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
 		  ion.m, n_n, dt, ion.np, N_coll[1], data_set_length);
-    nu_max *= 1.5; //Buffer padding
+    nu_max *= 3.0; //Buffer padding
     }  else {
       nu_max = 0.0;
       N_c = 0;
