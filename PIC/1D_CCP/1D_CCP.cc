@@ -53,8 +53,9 @@ int main(void) {
 
   // Input settings
   double phi0 = 0.0; // Reference potential
+  double P = 0.3; // Pressure, [Pa]
   double T_n = 300; // Neutral temp, [K]
-  double n_n = 6.5e18; // Neutral number density, 
+  double n_n = P/(k_B*T_n); // Neutral number density, 
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
@@ -130,18 +131,20 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e6;
+  electron.np = 1e5;
   electron.T = 300.0; //[K]
-  electron.spwt = 1e4;
+  electron.spwt = 1e14/electron.np;
+  electron.gamma[0] = 0.2;;
 
   // Ion particle data
   species ion;
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e6;
+  ion.np = 1e5;
   ion.T = 300.0; //[K]
-  ion.spwt = 1e4;
+  ion.spwt = 1e14/electron.np;
+  ion.gamma[1] = 0.15;
 
   for (int i = 0; i < electron.np; ++i) {
     electron.x[i] = double(rand())/RAND_MAX*(elec_range[2]-elec_range[1])*dx + 
@@ -224,6 +227,8 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
+  //char simNum = "001";
+
   ofstream FieldFile("Results/ESFieldData001.txt");
   ofstream NumFile("Results/NumberPart001.txt");
 
@@ -233,6 +238,8 @@ int main(void) {
   //ParticleFile << "Iteration / x / v / spwt / q";
   //ParticleFile << endl;
 
+  NumFile << "Spwt: " << electron.spwt << ", np_0: " << electron.np;
+  NumFile << endl;
   NumFile << "Iteration / Electron np / Ion np" << endl;
   
   //////////////////////////////////////////////////////////
@@ -254,7 +261,7 @@ int main(void) {
       RHS[i] = 0.0;
       electron.max_epsilon = 0.0;
       ion.max_epsilon = 0.0;
-      
+      /*
       if (i >=elec_range[0] && i <= elec_range[1]) {
         phi_exact[i] = phi_left;
       } else if (i >= elec_range[2] && i <= elec_range[3]) {
@@ -263,7 +270,7 @@ int main(void) {
 	phi_exact[i] = (phi_right-phi_left)/(L_inner)*(dx*i-(elec_range[1]*dx)) 
 		+ phi_left;
       }
-      /*
+      
 
       if (i >=elec_range[0] && i <= elec_range[1]-1) {
         phi_cc_exact[i] = phi_left;
@@ -305,7 +312,7 @@ int main(void) {
 
     // Account for volume
     for (int i = 0; i < nn; ++i) {
-      rho[i] /= dx*dx;
+      rho[i] /= dx;
 
       // If on the boundary, half the volume.
       if (i == 0 || i == nn-1) {
@@ -342,7 +349,7 @@ int main(void) {
       a[i] = 1.0;
       b[i] = -2.0;
       c[i] = 1.0;
-      RHS[i] *= dx*dx;
+      RHS[elec_range[1]+1+i] *= dx*dx;
     }
     a[0] = 0.0;
     c[nn_inner-1] = 0.0;
@@ -426,12 +433,29 @@ int main(void) {
 
       if (electron.x[p] < elec_range[1]*dx ||
 	  electron.x[p] > elec_range[2]*dx) {
-	electron.remove_part(p);
+	if(double(rand())/RAND_MAX < electron.gamma[0]) {
+	  electron.vx[p] = -electron.vx[p];
+	  if (electron.x[p] < elec_range[1]*dx) {
+	    electron.x[p] = elec_range[1]*dx+
+		    (elec_range[1]*dx-electron.x[p]);
+	  } else {
+	    electron.x[p] = elec_range[2]*dx - 
+		    (electron.x[p]-elec_range[2]*dx);
+	  }
+	}
+       
+	else {
+	  electron.remove_part(p);
 	--p;
-      } else if (electron.epsilon[p] > electron.max_epsilon) {
+	} 
+      }
+
+      else if (electron.epsilon[p] > electron.max_epsilon) {
         electron.max_epsilon = electron.epsilon[p];
       }
     }
+
+    // Boundaries
     for (int p = 0; p < ion.np; ++p) {      
       get_Weights(ion.x[p], weights, &ion.node_index[p], dx);
 
@@ -446,12 +470,25 @@ int main(void) {
       ion.epsilon[p] = 0.5*ion.m*pow(getv(ion.vx[p], 
 			      ion.vy[p], ion.vz[p]),2.0)/e;
 
- 
       if (ion.x[p] < elec_range[1]*dx ||
 	  ion.x[p] > elec_range[2]*dx) {
+	// Inject electron at thermal velocity
+	if(double(rand())/RAND_MAX < ion.gamma[1]) {
+	  //cout << "injecting electron" << endl;
+	  electron.np += 1;
+	  electron.x[electron.np-1] = ion.x[p]-ion.vx[p]*dt; // Previous ion location
+	  electron.thermalVelocity(electron.np-1);
+	  electron.epsilon[electron.np-1] = 0.5*electron.m*
+		  		pow(getv(electron.vx[electron.np-1],
+			        electron.vy[electron.np-1],
+			       	electron.vz[electron.np-1]),2.0)/e;
+
+	}
 	ion.remove_part(p);
 	--p;
-      } else if (ion.epsilon[p] > ion.max_epsilon) {
+      }
+      
+      else if (ion.epsilon[p] > ion.max_epsilon) {
         ion.max_epsilon = ion.epsilon[p];
       }
     }
@@ -546,7 +583,7 @@ int main(void) {
     if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
 		  ion.m, n_n, dt, ion.np, N_coll[1], data_set_length);
-    nu_max *= 2.0; //Buffer padding
+    nu_max *= 1.5; //Buffer padding
     }  else {
       nu_max = 0.0;
       N_c = 0;

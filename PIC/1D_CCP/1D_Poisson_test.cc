@@ -19,20 +19,51 @@ for (int nn = 16 + 1; nn < 512 + 2; nn = 2*nn - 1) {
   double phi_left = 1.0;
   double phi_right = -1.0;
 
-  double *f = new double[nn];
+// Electric potential
+  int nn_inner = elec_range[2] - elec_range[1] - 1; // Interior nodes
+  double *RHS = new double[nn];
+  double *a = new double[nn_inner];
+  double *b = new double[nn_inner];
+  double *c = new double[nn_inner];
+
   double *u_exact = new double[nn];
   double *u_approx = new double[nn];
 
   for (int i = 0; i < nn; ++i) {
     u_approx[i] = 0.0;
     u_exact[i] = cos(M_PI*i*dx);
-    f[i] = -M_PI*M_PI*u_exact[i];
+    RHS[i] = -M_PI*M_PI*u_exact[i];
   }
 
-  //jacobi_Update(u_approx, f, elec_range, phi_left, phi_right,
-	//	  dx, nn, 5e5, 1e-6);
+    for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
+      u_approx[i] = phi_left;
+      /*if (i < elec_range[1]) {
+        /phi_cc[i] = phi_left;
+      }*/
+    }
+    for (int i = elec_range[2]; i <= elec_range[3]; ++i) {
+      u_approx[i] = phi_right;
+      /*if (i < elec_range[3]) {
+        /phi_cc[i] = phi_right;
+      }*/
+    }
+    
+    RHS[elec_range[1] + 1] -= phi_left/(dx*dx);
+    RHS[elec_range[2] - 1] -= phi_right/(dx*dx);
 
-  triDiagSolver(u_approx, f, elec_range, phi_left, phi_right, dx, nn);
+    for (int i = 0; i < nn_inner; ++i) {
+      a[i] = 1.0;
+      b[i] = -2.0;
+      c[i] = 1.0;
+      RHS[elec_range[1]+1+i] *= dx*dx;
+    }
+    a[0] = 0.0;
+    c[nn_inner-1] = 0.0;
+    
+    triDiagSolver(&u_approx[elec_range[1] + 1], a, b, c, 
+		    &RHS[elec_range[1] + 1], nn_inner);
+
+
   double residual = 0.0;
   double norm_exact = 0.0;
   for (int i = 0; i < nn; ++i) {
@@ -46,7 +77,7 @@ for (int nn = 16 + 1; nn < 512 + 2; nn = 2*nn - 1) {
   cout << "nn = " << nn << " Residual = " << residual << endl;
 
   delete(elec_range);
-  delete(f);
+  delete(RHS);
   delete(u_exact);
   delete(u_approx);
 }

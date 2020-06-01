@@ -10,7 +10,8 @@ class species {
     double *vx;
     double *vy;    
     double *vz;   
-    double *epsilon;    
+    double *epsilon;
+    double *gamma; // 0 is reflection, 1 is see    
     // Keeps track of node closest to
     int *node_index;
 
@@ -34,7 +35,8 @@ void species::initialize(int max_part) {
   vz = new double [max_part];
   epsilon = new double[max_part];
   // Keeps track of node closest to
-  node_index = new int[max_part]; 
+  node_index = new int[max_part];
+  gamma = new double[2]; 
 }
 
 void species::clean(void) {
@@ -44,6 +46,7 @@ void species::clean(void) {
   delete(vy);
   delete(vz);
   delete(epsilon);
+  delete(gamma);
 }
 
 void species::remove_part(int index) {
@@ -55,6 +58,7 @@ void species::remove_part(int index) {
   epsilon[index] = epsilon[np-1];
   np -= 1;
 }
+
 
 void species::thermalVelocity(int index) {
   thermalVelSample(&vx[index], &vy[index], &vz[index],

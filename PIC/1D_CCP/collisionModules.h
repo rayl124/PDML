@@ -112,10 +112,18 @@ void getNullCollPart(double *CS_energy,
 		    data_set_length);
   
   for (int i = 0; i < N_coll; ++i) {
-       sigma_total += linInterp(epsilon_max, CS_energy[search_index],
+    if (search_index == data_set_length - 1) {
+    sigma_total += linInterp(epsilon_max, CS_energy[search_index - 1],
+		       CS_energy[search_index],
+		       CS_data[i*data_set_length + search_index - 1],
+		       CS_data[i*data_set_length + search_index]);
+    }
+    else {
+      sigma_total += linInterp(epsilon_max, CS_energy[search_index],
 		       CS_energy[search_index + 1],
 		       CS_data[i*data_set_length + search_index],
 		       CS_data[i*data_set_length + search_index + 1]);
+    }
   }
 
   // Convert energy to joules then calculate velocity
@@ -400,15 +408,17 @@ void i_scattering(double *part_vx,
 		double T_target)
 {
 
-  double *part_t_vx, *part_t_vy, *part_t_vz;
+  double part_t_vx = 0.0;
+  double part_t_vy = 0.0;
+  double part_t_vz = 0.0;
 
-  thermalVelSample(part_t_vx, part_t_vy, part_t_vz,
+  thermalVelSample(&part_t_vx, &part_t_vy, &part_t_vz,
 		   T_target, m_target);
 
   // Change to reference frame where target is at rest
-  *part_vx -= *part_t_vx;
-  *part_vy -= *part_t_vy;
-  *part_vz -= *part_t_vz;
+  *part_vx -= part_t_vx;
+  *part_vy -= part_t_vy;
+  *part_vz -= part_t_vz;
 
   // Assumes that source and target are of the same mass
   // such as Ar and Ar+
@@ -449,8 +459,8 @@ void i_scattering(double *part_vx,
   *part_vz = alpha*v_newz;
 
   // Change back to lab frame
-  *part_vx += *part_t_vx;
-  *part_vy += *part_t_vy;
-  *part_vz += *part_t_vz;
+  *part_vx += part_t_vx;
+  *part_vy += part_t_vy;
+  *part_vz += part_t_vz;
 }
 #endif
