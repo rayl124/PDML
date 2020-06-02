@@ -131,7 +131,7 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e4;
+  electron.np = 1e6;
   electron.T = 300.0; //[K]
   electron.spwt = 1e14/electron.np;
   electron.gamma[0] = 0.2;;
@@ -141,7 +141,7 @@ int main(void) {
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e4;
+  ion.np = 1e6;
   ion.T = 300.0; //[K]
   ion.spwt = 1e14/electron.np;
   ion.gamma[1] = 0.15;
@@ -193,33 +193,13 @@ int main(void) {
   
   // Set up phi boundaries and initial values
   double *phi = new double[nn];
-  //double *phi_cc = new double[nn-1];
-  //double *l_coeff = new double[3];
   double t;
-  /* Cell-centered discretization
-  double *x_cc_left = new double[3];
-  double *x_cc_right = new double[3];
-  x_cc_left[0] = -0.5*dx;
-  x_cc_left[1] = 0.5*dx;
-  x_cc_left[2] = 1.5*dx;
-  x_cc_right[0] = (0.075)-1.5*dx;
-  x_cc_right[1] = 0.075-0.5*dx;
-  x_cc_right[2] = 0.075+0.5*dx;
-  */ 
 
   // Set up exact solution;
   double *phi_exact = new double[nn];
-  //double *phi_cc_exact = new double[nn-1];
   for (int i = 0; i < nn; ++i) {
      phi[i] = 0.0;
-     phi_exact[i] = 0.0;
-     /*
-     if (i < nn-1) {
-       phi_cc[i] = 0.0;
-       phi_cc_exact[i] = 0.0;
-     } */
   }
-  //
  
   //////////////////////////////////////////////////////////
   //
@@ -227,18 +207,26 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
-  //char simNum = "001";
+  string simNum ("002");
+  
+  ofstream InputFile("Results/Input"+simNum+".txt");
+  ofstream FieldFile("Results/ESFieldData"+simNum+".txt");
+  ofstream NumFile("Results/NumberPart"+simNum+".txt");
 
-  ofstream FieldFile("Results/ESFieldData003.txt");
-  ofstream NumFile("Results/NumberPart003.txt");
+  InputFile << "Misc comments: n/a" << endl;
+  InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
+  InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
+  InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
+  InputFile << " " << ion.spwt << " " << V_hf << " " << V_lf << " " << f_hf;
+  InputFile << " " << f_lf << " " << ts << " " << dt << " " << nn << endl;
 
-  FieldFile << "Iteration / Node x / Charge Density / ";
+
+  FieldFile << "Iteration / Time / Node x / Charge Density / ";
   FieldFile << "Electric Potential / Electric Field" << endl;
 
   //ParticleFile << "Iteration / x / v / spwt / q";
   //ParticleFile << endl;
 
-  NumFile << "Spwt: " << electron.spwt << ", np_0: " << electron.np;
   NumFile << endl;
   NumFile << "Iteration / Electron np / Ion np" << endl;
   
@@ -620,7 +608,8 @@ int main(void) {
     }
 
 
-    cout << "End of iteration, electron.np = " << electron.np << endl;
+    cout << "End of iteration" << endl;
+    cout << "electron.np = " << electron.np << endl;
     cout << "ion.np = " << ion.np << endl;
 
     ////////////////////////////////////////////////////
@@ -631,7 +620,8 @@ int main(void) {
 
     if ((iter+1)%5 == 0) {
       for (int i = 0; i < nn; ++i) {
-        FieldFile << iter << " " << dx*i << " " << rho[i] << " " << phi[i] << " ";
+        FieldFile << iter << " " << t << " " << dx*i << " ";
+	FieldFile << rho[i] << " " << phi[i] << " ";
 	FieldFile << E_field[i] << " "  << endl;
       }
       /*

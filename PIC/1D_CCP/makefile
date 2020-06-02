@@ -17,6 +17,6 @@ collision_test: collision_test.cc collisionModules.h
 
 uploadGIT: 
 	cd ..
-	git add -A 1D_CCP
+	git add -A 1D_CCP/
 	git commit -m "New simulation"
 	git push origin master
