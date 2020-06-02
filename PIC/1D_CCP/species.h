@@ -46,6 +46,7 @@ void species::clean(void) {
   delete(vy);
   delete(vz);
   delete(epsilon);
+  delete(node_index);
   delete(gamma);
 }
 
@@ -56,9 +57,9 @@ void species::remove_part(int index) {
   vy[index] = vy[np-1];
   vz[index] = vz[np-1];
   epsilon[index] = epsilon[np-1];
+  node_index[index] = node_index[np-1];
   np -= 1;
 }
-
 
 void species::thermalVelocity(int index) {
   thermalVelSample(&vx[index], &vy[index], &vz[index],

@@ -5,6 +5,8 @@
 #include <ctime>
 #include <math.h>
 
+using namespace std;
+
 /* Given a set of data and a target value,
  * this will return the index of the value that is
  * the closest but under the target value
@@ -20,16 +22,23 @@
   int guess = round((data_set_length - 1)/2.0);
   int a = 0;
   int b = data_set_length - 1;
-  
-  //if (target == data_set[0]) {
-    //return 0;
-  //}
+ 
+  if (target == data_set[0]) {
+    return 0;
+  }
   if (target > data_set[data_set_length-1]) {
     return data_set_length-1;
   }
   while(1) {
+    if (target < data_set[0]) {
+      cout << "ERROR!!! Target is "<< target << endl;
+    }
     if (data_set[guess] == target) {
       return guess;
+    } else if (data_set[guess - 1] == target) {
+      return guess - 1;
+    } else if (data_set[guess + 1] == target) {
+      return guess + 1;
     }
     if (data_set[guess] < target) {
       if (data_set[guess + 1] > target) {
@@ -208,7 +217,7 @@ void thermalVelSample(double *part_vx,
   const double k_B = 1.381e-23;
   // Thermal velocity
   double v_th = sqrt(2*k_B*T_part/m_part);
-
+  
   int M = 3;
   double f_M = 0.0;
 
@@ -336,7 +345,7 @@ void e_ionization(double *part_vx,
   double R4 = double(rand())/RAND_MAX;
   double R5 = double(rand())/RAND_MAX;
 
-  double epsilon_ej = B*tan(R1*atan((epsilon_inc-epsilon_ion)/2*B));
+  double epsilon_ej = B*tan(R1*atan((epsilon_inc-epsilon_ion)/(2*B)));
   double epsilon_sc = epsilon_inc - epsilon_ion - epsilon_ej;
 
   double chi_ej = acos((2+epsilon_ej-2*pow(1+epsilon_ej, R2))/epsilon_ej);
@@ -368,7 +377,9 @@ void e_ionization(double *part_vx,
 	   sin(chi_ej)*cos(phi_ej);
 
   double alpha = sqrt(epsilon_ej/epsilon_inc);
-
+  while (isnan(alpha)) {
+    cout << "alpha 1 is wrong" << endl;
+  }
   *part_ej_vx = alpha*v_newx;
   *part_ej_vy = alpha*v_newy;
   *part_ej_vz = alpha*v_newz;
@@ -392,6 +403,9 @@ void e_ionization(double *part_vx,
 	   sin(chi_sc)*cos(phi_sc);
 
   alpha = sqrt(epsilon_sc/epsilon_inc);
+  while (isnan(alpha)) {
+    cout << "alpha 2 is wrong" << endl;
+  }
 
   *part_vx = alpha*v_newx;
   *part_vy = alpha*v_newy;

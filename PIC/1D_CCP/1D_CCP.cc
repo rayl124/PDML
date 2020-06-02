@@ -59,7 +59,7 @@ int main(void) {
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
-  int ts = 200; // # of time steps
+  int ts = 200*200; // # of time steps
   double dx= 5.0e-4; // length of each cell
   double dt = 1.0/(27.12e6*200.0); 
   double L = 0.095; // Domain length m
@@ -131,7 +131,7 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e6;
+  electron.np = 1e5;
   electron.T = 300.0; //[K]
   electron.spwt = 1e14/electron.np;
   electron.gamma[0] = 0.2;;
@@ -141,7 +141,7 @@ int main(void) {
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e6;
+  ion.np = 1e5;
   ion.T = 300.0; //[K]
   ion.spwt = 1e14/electron.np;
   ion.gamma[1] = 0.15;
@@ -207,7 +207,7 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
-  string simNum ("002");
+  string simNum ("004");
   
   ofstream InputFile("Results/Input"+simNum+".txt");
   ofstream FieldFile("Results/ESFieldData"+simNum+".txt");
@@ -227,7 +227,6 @@ int main(void) {
   //ParticleFile << "Iteration / x / v / spwt / q";
   //ParticleFile << endl;
 
-  NumFile << endl;
   NumFile << "Iteration / Electron np / Ion np" << endl;
   
   //////////////////////////////////////////////////////////
@@ -242,32 +241,12 @@ int main(void) {
     phi_left = V_hf*sin(2*M_PI*f_hf*t) +  
 	    V_lf*sin(2*M_PI*f_lf*t);
     // Reset variables
-    
+    electron.max_epsilon = 0.0;
+      ion.max_epsilon = 0.0;
     for (int i = 0; i< nn; ++i) {
       rho[i] = 0.0;
       E_field[i] = 0.0;
       RHS[i] = 0.0;
-      electron.max_epsilon = 0.0;
-      ion.max_epsilon = 0.0;
-      /*
-      if (i >=elec_range[0] && i <= elec_range[1]) {
-        phi_exact[i] = phi_left;
-      } else if (i >= elec_range[2] && i <= elec_range[3]) {
-	phi_exact[i] = phi_right;
-      } else {
-	phi_exact[i] = (phi_right-phi_left)/(L_inner)*(dx*i-(elec_range[1]*dx)) 
-		+ phi_left;
-      }
-      
-
-      if (i >=elec_range[0] && i <= elec_range[1]-1) {
-        phi_cc_exact[i] = phi_left;
-      } else if (i >= elec_range[2] && i <= elec_range[3]) {
-	phi_cc_exact[i] = phi_right;
-      } else {
-	phi_cc_exact[i] = (phi_right-phi_left)/(L_inner)*(dx*(i+0.5)-(elec_range[1]*dx)) 
-		+ phi_left;
-      }*/
     }
     
     cout << "Iter: " << iter << endl;
@@ -319,15 +298,9 @@ int main(void) {
     cout << "Computing electric potential..." << endl;
     for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
       phi[i] = phi_left;
-      /*if (i < elec_range[1]) {
-        /phi_cc[i] = phi_left;
-      }*/
     }
     for (int i = elec_range[2]; i <= elec_range[3]; ++i) {
       phi[i] = phi_right;
-      /*if (i < elec_range[3]) {
-        /phi_cc[i] = phi_right;
-      }*/
     }
     
     RHS[elec_range[1] + 1] -= phi_left/(dx*dx);
@@ -344,34 +317,6 @@ int main(void) {
     
     triDiagSolver(&phi[elec_range[1] + 1], a, b, c, 
 		    &RHS[elec_range[1] + 1], nn_inner);
-
-    // Cell Centered
-    /*
-    c[nn_inner-1] = 1.0;
-    c[nn_inner] = 0.0;
-
-    legendrePoly(0.0, x_cc_left, l_coeff, 3);
-    b[0] -= l_coeff[1]/l_coeff[0];
-    c[0] -= l_coeff[2]/l_coeff[0];
-
-    for (int i = 0; i < nn; ++i) {
-      RHS[i] = 0.0;
-    }
-
-    RHS[elec_range[1]] -= phi_left/(dx*dx*l_coeff[0]);
-
-    legendrePoly(0.075, x_cc_right, l_coeff, 3);
-    b[nn_inner] -= l_coeff[1]/l_coeff[2];
-    a[nn_inner] -= l_coeff[0]/l_coeff[2];
-    RHS[elec_range[2] - 1] -= phi_right/(dx*dx*l_coeff[2]);
-
-    for (int i = 0; i < nn; ++i) {
-      RHS[i] *= dx*dx;
-    }
-
-    triDiagSolver(&phi_cc[elec_range[1]], a, b, c, 
-		    &RHS[elec_range[1]], nn_inner + 1);
-    */
 
 
     
@@ -436,7 +381,11 @@ int main(void) {
 	  electron.remove_part(p);
 	--p;
 	} 
+    while (isnan(electron.epsilon[p])) {
+	    cout << "electron mover error" << endl;
       }
+      }
+     
 
       else if (electron.epsilon[p] > electron.max_epsilon) {
         electron.max_epsilon = electron.epsilon[p];
@@ -470,6 +419,9 @@ int main(void) {
 		  		pow(getv(electron.vx[electron.np-1],
 			        electron.vy[electron.np-1],
 			       	electron.vz[electron.np-1]),2.0)/e;
+	  while (isnan(electron.epsilon[electron.np-1])) {
+	    cout << "Injecting electron error" << endl;
+	  }
 
 	}
 	ion.remove_part(p);
@@ -491,7 +443,6 @@ int main(void) {
     cout << "Calculating collisions..." << endl;
 
     // Get number of particles for electron - neutral collisions
-    cout << "Max_epsilon = " << electron.max_epsilon << endl;
     if (electron.np > 0) {
     getNullCollPart(CS_energy, e_n_CS, electron.max_epsilon, 
 		  &nu_max, &P_max, &N_c,
@@ -503,7 +454,6 @@ int main(void) {
       N_c = 0;
     }
     cout << "N_c = " << N_c << endl;
-    cout << "nu_max = " << nu_max<<endl;
 
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(electron.np-1));
@@ -524,6 +474,10 @@ int main(void) {
           electron.epsilon[rand_index] = 0.5*electron.m*
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
+	  while (isnan(electron.epsilon[rand_index])) {
+	    cout << "elastic electron error" << endl;
+	  }
+
 	  continue;
         case 1:
 	  epsilon_exc = 1.160330e1; // From crtrs.dat.txt
@@ -533,6 +487,10 @@ int main(void) {
           electron.epsilon[rand_index] = 0.5*electron.m*
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
+ while (isnan(electron.epsilon[rand_index])) {
+	    cout << "ex 1  electron error" << endl;
+	  }
+
 
 	  continue;
         case 2:
@@ -543,13 +501,17 @@ int main(void) {
           electron.epsilon[rand_index] = 0.5*electron.m*
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
+
+while (isnan(electron.epsilon[rand_index])) {
+	    cout << "ex2 electron error" << endl;
+	  }
+
 	  continue;
         case 3:
-	  //cout << "Electron ejected" << endl;
 	  electron.np += 1;
-	  electron.x[electron.np-1] = 0.0;
-	  electron.x[electron.np-1] = 0.0;
-	  electron.x[electron.np-1] = 0.0;
+	  electron.vx[electron.np-1] = 0.0;
+	  electron.vy[electron.np-1] = 0.0;
+	  electron.vz[electron.np-1] = 0.0;
 	  epsilon_ion = 1.60055e1; // From crtrs.dat.txt
 	  e_ionization(&electron.vx[rand_index], &electron.vy[rand_index],
 		  &electron.vz[rand_index], &electron.vx[electron.np-1], 
@@ -561,6 +523,12 @@ int main(void) {
 		  pow(getv(electron.vx[electron.np-1],
 		  electron.vy[electron.np-1], 
 	 	  electron.vz[electron.np-1]),2.0)/e; //[eV]
+while (isnan(electron.epsilon[rand_index])) {
+	    cout << "ejected coll  electron error" << endl;
+	  }
+while (isnan(electron.epsilon[electron.np-1])) {
+	    cout << "ejected coll enp electron error" << endl;
+	  }
 	  continue;	
       case 4:
 	  continue;
@@ -568,8 +536,6 @@ int main(void) {
     }
     
     // Ion-neutral collisions
-    cout << "Max_epsilon = " << ion.max_epsilon << endl;
-
     if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
 		  ion.m, n_n, dt, ion.np, N_coll[1], data_set_length);
@@ -622,7 +588,7 @@ int main(void) {
     //
     ////////////////////////////////////////////////////
 
-    if ((iter+1)%5 == 0) {
+    if ((iter+1)%25 == 0) {
       for (int i = 0; i < nn; ++i) {
         FieldFile << iter << " " << t << " " << dx*i << " ";
 	FieldFile << rho[i] << " " << phi[i] << " ";
