@@ -131,7 +131,7 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e5;
+  electron.np = 1e6;
   electron.T = 300.0; //[K]
   electron.spwt = 1e14/electron.np;
   electron.gamma[0] = 0.2;;
@@ -141,7 +141,7 @@ int main(void) {
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e5;
+  ion.np = 1e6;
   ion.T = 300.0; //[K]
   ion.spwt = 1e14/electron.np;
   ion.gamma[1] = 0.15;
@@ -491,7 +491,7 @@ int main(void) {
     cout << "Calculating collisions..." << endl;
 
     // Get number of particles for electron - neutral collisions
-    //cout << "Max_epsilon" << electron.max_epsilon << endl;
+    cout << "Max_epsilon = " << electron.max_epsilon << endl;
     if (electron.np > 0) {
     getNullCollPart(CS_energy, e_n_CS, electron.max_epsilon, 
 		  &nu_max, &P_max, &N_c,
@@ -568,6 +568,8 @@ int main(void) {
     }
     
     // Ion-neutral collisions
+    cout << "Max_epsilon = " << ion.max_epsilon << endl;
+
     if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
 		  ion.m, n_n, dt, ion.np, N_coll[1], data_set_length);
@@ -576,6 +578,8 @@ int main(void) {
       nu_max = 0.0;
       N_c = 0;
     }
+    cout << "N_c = " << N_c << endl;
+    cout << "nu_max = " << nu_max<<endl;
 
 
     for (int i = 0; i < N_c; ++i) {
