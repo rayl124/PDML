@@ -131,17 +131,17 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e5;
+  electron.np = 1e4;
   electron.T = 300.0; //[K]
   electron.spwt = 1e14/electron.np;
-  electron.gamma[0] = 0.2;;
+  electron.gamma[0] = 0.2;
 
   // Ion particle data
   species ion;
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e5;
+  ion.np = 1e4;
   ion.T = 300.0; //[K]
   ion.spwt = 1e14/electron.np;
   ion.gamma[1] = 0.15;
@@ -207,7 +207,8 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
-  string simNum ("004");
+  int write_iter = 25; // Write ever x number of iterations
+  string simNum ("006");
   
   ofstream InputFile("Results/Input"+simNum+".txt");
   ofstream FieldFile("Results/ESFieldData"+simNum+".txt");
@@ -588,7 +589,7 @@ while (isnan(electron.epsilon[electron.np-1])) {
     //
     ////////////////////////////////////////////////////
 
-    if ((iter+1)%25 == 0) {
+    if ((iter+1)%write_iter == 0) {
       for (int i = 0; i < nn; ++i) {
         FieldFile << iter << " " << t << " " << dx*i << " ";
 	FieldFile << rho[i] << " " << phi[i] << " ";
