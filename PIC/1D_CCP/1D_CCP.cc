@@ -330,7 +330,7 @@ int main(void) {
     cout << "Computing electric field..." << endl;
 
     // Finite difference accuracy 2 order
-    for (int i = 0; i < nn; ++i) {
+    for (int i = elec_range[1]; i <= elec_range[2]; ++i) {
       // Left
       if (i == elec_range[1]) {
 	E_field[i] = -(-0.5*phi[i+2] + 2.0*phi[i+1] - 1.5*phi[i])/dx;
