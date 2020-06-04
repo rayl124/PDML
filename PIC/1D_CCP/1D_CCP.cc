@@ -131,7 +131,7 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e4;
+  electron.np = 1e5;
   electron.T = 300.0; //[K]
   electron.spwt = 1e14/electron.np;
   electron.gamma[0] = 0.2;
@@ -141,7 +141,7 @@ int main(void) {
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e4;
+  ion.np = 1e5;
   ion.T = 300.0; //[K]
   ion.spwt = 1e14/electron.np;
   ion.gamma[1] = 0.15;
@@ -208,13 +208,13 @@ int main(void) {
   //////////////////////////////////////////////////////////
   
   int write_iter = 25; // Write ever x number of iterations
-  string simNum ("006");
+  string simNum ("007");
   
   ofstream InputFile("Results/Input"+simNum+".txt");
   ofstream FieldFile("Results/ESFieldData"+simNum+".txt");
   ofstream NumFile("Results/NumberPart"+simNum+".txt");
 
-  InputFile << "Misc comments: n/a" << endl;
+  InputFile << "Misc comments: Repeat of 004" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
