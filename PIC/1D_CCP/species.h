@@ -2,24 +2,27 @@
 #include "collisionModules.h"
 
 class species {
-  int max_part;
+  int max_part;  // Max particles
 
   public:
-    double spwt;
-    double *x;
-    double *vx;
-    double *vy;    
-    double *vz;   
-    double *epsilon;
-    double *gamma; // 0 is reflection, 1 is see    
-    // Keeps track of node closest to
+    double spwt; // Specific weight (can be changed to be variable)
+    double *x;   // Position in m
+    double *vx;  // x velocity in m/s
+    double *vy;  // y velocity in m/s
+    double *vz;  // z velocity in m/s
+    double *epsilon;  // energy in eV
+    double *gamma; // scattering coefficients,
+    		   // 0 is reflection, 1 is secondary electron emission
+
+    // Keeps track of global nodes the particle is between
     int *node_index;
 
-    double T;
-    double m;
-    double q;
-    double max_epsilon = 0.0;
-    int np = 0;
+    double T;  // Temperature in K
+    double m;  // Mass in kg
+    double q;  // Charge in C
+
+    double max_epsilon = 0.0;  // Max energy
+    int np = 0;  // Number of current particles
 
     void initialize(int max_part);
     void clean(void);
@@ -27,6 +30,8 @@ class species {
     void thermalVelocity(int index);
 };
 
+// Initializes arrays, required every time a new
+// species is created
 void species::initialize(int max_part) {
   //spwt = new double[max_part];
   x = new double[max_part];
@@ -39,8 +44,8 @@ void species::initialize(int max_part) {
   gamma = new double[2]; 
 }
 
+// Frees memory when simulation is done
 void species::clean(void) {
-  //delete(spwt);
   delete(x);
   delete(vx);
   delete(vy);
@@ -50,6 +55,7 @@ void species::clean(void) {
   delete(gamma);
 }
 
+// Removed a particle when it leaves the domain
 void species::remove_part(int index) {
   //spwt[index] = spwt[np-1];
   x[index] = x[np-1];
@@ -61,6 +67,7 @@ void species::remove_part(int index) {
   np -= 1;
 }
 
+// Gives a particle a velocity from its thermal velocity
 void species::thermalVelocity(int index) {
   thermalVelSample(&vx[index], &vy[index], &vz[index],
 		  T, m);

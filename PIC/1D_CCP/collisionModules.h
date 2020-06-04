@@ -141,6 +141,12 @@ void getNullCollPart(double *CS_energy,
 			n_target, dt);
   // Returned values
   *nu_max = v*sigma_total*n_target;
+
+  // Add padding to P_max and nu_max to ensure you get the max
+  // probability
+  *P_max *= 2.0;
+  *nu_max *= 2.0;
+
   *N_c = round(np*(*P_max));
 }
 

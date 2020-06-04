@@ -146,6 +146,8 @@ int main(void) {
   ion.spwt = 1e14/electron.np;
   ion.gamma[1] = 0.15;
 
+  // Uniformly distribute initial positions, assign initial velocity from
+  // thermal distribution
   for (int i = 0; i < electron.np; ++i) {
     electron.x[i] = double(rand())/RAND_MAX*(elec_range[2]-elec_range[1])*dx + 
 	    elec_range[1]*dx;
@@ -158,7 +160,7 @@ int main(void) {
     ion.thermalVelocity(i);
   }
 
-
+  // Neutral mass
   double m_n = ion.m;
 
   // Calculate collisions setup
@@ -180,8 +182,10 @@ int main(void) {
 
   // Electric potential
   int nn_inner = elec_range[2] - elec_range[1] - 1; // Interior nodes
-  double *RHS = new double[nn];
-  double *a = new double[nn_inner];
+  double *phi = new double[nn];
+  double t;  // time
+  double *RHS = new double[nn]; // Right hand side
+  double *a = new double[nn_inner];  // Tridiagonal coeffs
   double *b = new double[nn_inner];
   double *c = new double[nn_inner];
 
@@ -190,16 +194,8 @@ int main(void) {
 
   // Move Particles
   double part_E;
-  
-  // Set up phi boundaries and initial values
-  double *phi = new double[nn];
-  double t;
 
-  // Set up exact solution;
-  double *phi_exact = new double[nn];
-  for (int i = 0; i < nn; ++i) {
-     phi[i] = 0.0;
-  }
+
  
   //////////////////////////////////////////////////////////
   //
@@ -207,14 +203,14 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
-  int write_iter = 25; // Write ever x number of iterations
-  string simNum ("007");
+  int write_iter = 25; // Write every x number of iterations
+  string simNum ("009");
   
   ofstream InputFile("Results/Input"+simNum+".txt");
   ofstream FieldFile("Results/ESFieldData"+simNum+".txt");
   ofstream NumFile("Results/NumberPart"+simNum+".txt");
 
-  InputFile << "Misc comments: Repeat of 004" << endl;
+  InputFile << "Misc comments: Fixed handling of BC, compare with 008" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -237,14 +233,15 @@ int main(void) {
   /////////////////////////////////////////////////////////
   
   for (int iter = 0; iter < ts; ++iter) {
-    // Electrode Potential
+    // Electrode Potential boundaries
     t = iter*dt;
     phi_left = V_hf*sin(2*M_PI*f_hf*t) +  
 	    V_lf*sin(2*M_PI*f_lf*t);
     // Reset variables
     electron.max_epsilon = 0.0;
-      ion.max_epsilon = 0.0;
+    ion.max_epsilon = 0.0;
     for (int i = 0; i< nn; ++i) {
+      phi[i] = 0.0;
       rho[i] = 0.0;
       E_field[i] = 0.0;
       RHS[i] = 0.0;
@@ -283,7 +280,7 @@ int main(void) {
       rho[i] /= dx;
 
       // If on the boundary, half the volume.
-      if (i == 0 || i == nn-1) {
+      if (i == elec_range[1] || i == elec_range[2]) {
 	rho[i] *= 2.0;
       }
       // Right hand side of Poisson equation
@@ -297,6 +294,8 @@ int main(void) {
     /////////////////////////////////////////////////
 
     cout << "Computing electric potential..." << endl;
+
+    // Dirichlet boundary
     for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
       phi[i] = phi_left;
     }
@@ -304,9 +303,11 @@ int main(void) {
       phi[i] = phi_right;
     }
     
+    // Adjust RHS to account for BC
     RHS[elec_range[1] + 1] -= phi_left/(dx*dx);
     RHS[elec_range[2] - 1] -= phi_right/(dx*dx);
 
+    // Tridiagonal coefficients
     for (int i = 0; i < nn_inner; ++i) {
       a[i] = 1.0;
       b[i] = -2.0;
@@ -316,11 +317,10 @@ int main(void) {
     a[0] = 0.0;
     c[nn_inner-1] = 0.0;
     
+    // Solve
     triDiagSolver(&phi[elec_range[1] + 1], a, b, c, 
 		    &RHS[elec_range[1] + 1], nn_inner);
 
-
-    
      /////////////////////////////////////////////////
     //
     // Compute electric field
@@ -332,10 +332,10 @@ int main(void) {
     // Finite difference accuracy 2 order
     for (int i = 0; i < nn; ++i) {
       // Left
-      if (i == 0) {
-	E_field[i] = -(-0.5*phi[2] + 2.0*phi[1] - 1.5*phi[0])/dx;
+      if (i == elec_range[1]) {
+	E_field[i] = -(-0.5*phi[i+2] + 2.0*phi[i+1] - 1.5*phi[i])/dx;
       } // Right
-      else if (i == nn-1) {
+      else if (i == elec_range[2]) {
 	E_field[i] = -(0.5*phi[i-2] -2.0*phi[i-1] + 1.5*phi[i])/dx;
       }
       else {
@@ -351,22 +351,27 @@ int main(void) {
 
     cout << "Moving Particles..." << endl;
 
-    // Uses same weights as charge density
     for (int p = 0; p < electron.np; ++p) {      
+      // Interpolate electric field at each particle
       get_Weights(electron.x[p], weights, &electron.node_index[p], dx);
-
       part_E = E_field[electron.node_index[p]]*weights[0] +
 	          E_field[electron.node_index[p] + 1]*weights[1];
 
+      // Push electrons
       electron.vx[p] = electron.vx[p] + electron.q/(electron.m) *
 	      	       part_E*dt;
       electron.x[p] = electron.x[p] + electron.vx[p]*dt;
 
+      // Update energy in eV
       electron.epsilon[p] = 0.5*electron.m*pow(getv(electron.vx[p], 
 			      electron.vy[p], electron.vz[p]),2.0)/e;
 
+      // At boundary, if elastic collision, reflect particle
+      // if not, absorb particle
       if (electron.x[p] < elec_range[1]*dx ||
 	  electron.x[p] > elec_range[2]*dx) {
+	
+	// Elastic      
 	if(double(rand())/RAND_MAX < electron.gamma[0]) {
 	  electron.vx[p] = -electron.vx[p];
 	  if (electron.x[p] < elec_range[1]*dx) {
@@ -378,16 +383,14 @@ int main(void) {
 	  }
 	}
        
+	// Absorption
 	else {
 	  electron.remove_part(p);
 	--p;
 	} 
-    while (isnan(electron.epsilon[p])) {
-	    cout << "electron mover error" << endl;
-      }
       }
      
-
+      // If not at boundary, update max_epsilon if needed	
       else if (electron.epsilon[p] > electron.max_epsilon) {
         electron.max_epsilon = electron.epsilon[p];
       }
@@ -395,11 +398,12 @@ int main(void) {
 
     // Boundaries
     for (int p = 0; p < ion.np; ++p) {      
+      // Interpolate electric field
       get_Weights(ion.x[p], weights, &ion.node_index[p], dx);
-
       part_E = E_field[ion.node_index[p]]*weights[0] +
 	          E_field[ion.node_index[p] + 1]*weights[1];
 
+      // Push ions
       ion.vx[p] = ion.vx[p] + ion.q/(ion.m) *
 	      	       part_E*dt;
       ion.x[p] = ion.x[p] + ion.vx[p]*dt;
@@ -408,11 +412,11 @@ int main(void) {
       ion.epsilon[p] = 0.5*ion.m*pow(getv(ion.vx[p], 
 			      ion.vy[p], ion.vz[p]),2.0)/e;
 
+      // Electron emit or absorption
       if (ion.x[p] < elec_range[1]*dx ||
 	  ion.x[p] > elec_range[2]*dx) {
 	// Inject electron at thermal velocity
 	if(double(rand())/RAND_MAX < ion.gamma[1]) {
-	  //cout << "injecting electron" << endl;
 	  electron.np += 1;
 	  electron.x[electron.np-1] = ion.x[p]-ion.vx[p]*dt; // Previous ion location
 	  electron.thermalVelocity(electron.np-1);
@@ -420,20 +424,17 @@ int main(void) {
 		  		pow(getv(electron.vx[electron.np-1],
 			        electron.vy[electron.np-1],
 			       	electron.vz[electron.np-1]),2.0)/e;
-	  while (isnan(electron.epsilon[electron.np-1])) {
-	    cout << "Injecting electron error" << endl;
-	  }
-
 	}
 	ion.remove_part(p);
 	--p;
       }
       
+      // Update max epsilon if needed
       else if (ion.epsilon[p] > ion.max_epsilon) {
         ion.max_epsilon = ion.epsilon[p];
       }
     }
-    // Boundaries    
+
 
     //////////////////////////////////////////////////
     //
@@ -449,12 +450,10 @@ int main(void) {
 		  &nu_max, &P_max, &N_c,
 		  electron.m, n_n, dt, electron.np, 
 		  N_coll[0], data_set_length);
-    nu_max *= 3.0; // Padding
     } else {
       nu_max = 0.0;
       N_c = 0;
     }
-    cout << "N_c = " << N_c << endl;
 
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(electron.np-1));
@@ -475,10 +474,6 @@ int main(void) {
           electron.epsilon[rand_index] = 0.5*electron.m*
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
-	  while (isnan(electron.epsilon[rand_index])) {
-	    cout << "elastic electron error" << endl;
-	  }
-
 	  continue;
         case 1:
 	  epsilon_exc = 1.160330e1; // From crtrs.dat.txt
@@ -488,11 +483,6 @@ int main(void) {
           electron.epsilon[rand_index] = 0.5*electron.m*
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
- while (isnan(electron.epsilon[rand_index])) {
-	    cout << "ex 1  electron error" << endl;
-	  }
-
-
 	  continue;
         case 2:
 	  epsilon_exc = 1.31041e1; // From crtrs.dat.txt
@@ -502,11 +492,6 @@ int main(void) {
           electron.epsilon[rand_index] = 0.5*electron.m*
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
-
-while (isnan(electron.epsilon[rand_index])) {
-	    cout << "ex2 electron error" << endl;
-	  }
-
 	  continue;
         case 3:
 	  electron.np += 1;
@@ -524,12 +509,6 @@ while (isnan(electron.epsilon[rand_index])) {
 		  pow(getv(electron.vx[electron.np-1],
 		  electron.vy[electron.np-1], 
 	 	  electron.vz[electron.np-1]),2.0)/e; //[eV]
-while (isnan(electron.epsilon[rand_index])) {
-	    cout << "ejected coll  electron error" << endl;
-	  }
-while (isnan(electron.epsilon[electron.np-1])) {
-	    cout << "ejected coll enp electron error" << endl;
-	  }
 	  continue;	
       case 4:
 	  continue;
@@ -539,8 +518,7 @@ while (isnan(electron.epsilon[electron.np-1])) {
     // Ion-neutral collisions
     if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
-		  ion.m, n_n, dt, ion.np, N_coll[1], data_set_length);
-    nu_max *= 3.0; //Buffer padding
+		  ion.m, n_n, dt, ion.np, N_coll[2], data_set_length);
     }  else {
       nu_max = 0.0;
       N_c = 0;
@@ -552,7 +530,7 @@ while (isnan(electron.epsilon[electron.np-1])) {
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(ion.np-1));
       type = getCollType(CS_energy, i_n_CS, ion.epsilon[rand_index],
-		    nu_max, ion.m, n_n, N_coll[1], data_set_length);
+		    nu_max, ion.m, n_n, N_coll[2], data_set_length);
     
       // switch-case for electron-neutral collisions
       // 0 - charge exchange
@@ -617,7 +595,7 @@ while (isnan(electron.epsilon[electron.np-1])) {
   delete(RHS);
   delete(E_field);
   delete(phi);
-  delete(phi_exact);
+
   
   electron.clean();
   ion.clean();
