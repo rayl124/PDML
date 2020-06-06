@@ -7,7 +7,8 @@
 
 using namespace std;
 
-/* Given a set of data and a target value,
+/* searchIndex
+ * Given a set of data and a target value,
  * this will return the index of the value that is
  * the closest but under the target value
  *
@@ -18,7 +19,8 @@ using namespace std;
  */
  int searchIndex(double target,
 		double *data_set,
-		int data_set_length) {
+		int data_set_length) 
+{
   int guess = round((data_set_length - 1)/2.0);
   int a = 0;
   int b = data_set_length - 1;
@@ -59,8 +61,10 @@ using namespace std;
     guess = round((b+a)/2.0);
   }
 }
-/* Linearly interpolates between two values
+/* linInterp
+ * Linearly interpolates between two values
  * Returns interpolated y value
+ *
  * target_x: value interpolated at
  * x1, x2: left and right x bounds
  * y1, y2: left and right y bounds
@@ -68,27 +72,42 @@ using namespace std;
  */
 double linInterp(double target_x,
 		double x1, double x2,
-		double y1, double y2) {
+		double y1, double y2) 
+{
   return (y2-y1)*(target_x - x1)/(x2-x1) + y1;
 }
 
-
+/* getP
+ * Calculates the probability of a collision
+ *
+ * epsilon: energy of particle [eV]
+ * sigma: cross section [m^2]
+ * m: mass [kg]
+ * n_target: number density [m^-3]
+ * dt: timestep [s]
+ */
 double getP(double epsilon,
 	    double sigma,
 	    double m,
 	    double n_target,
-	    double dt) {
+	    double dt) 
+{
   double e = 1.602e-19;
-  double v = sqrt(2*e*epsilon/m);
+  double v = sqrt(2*e*epsilon/m); // [m/s]
   double nu = v*sigma*n_target;
   return 1.0-exp(-dt*nu);
 }
 
-double getv(double vx, double vy, double vz) {
+/* getv
+ * Get velocity magnitude from three components
+ */
+double getv(double vx, double vy, double vz) 
+{
   return sqrt(vx*vx + vy*vy + vz*vz);
 }
 
-/* Returns number of particles that partake in collisions
+/* getNullCollPart
+ * Returns number of particles that partake in collisions
  * Also returns max frequency for collision type calculations
  *
  * CS_energy: array of energy vallues of length data_set_length
@@ -111,15 +130,17 @@ void getNullCollPart(double *CS_energy,
 		     double *nu_max, double *P_max, int *N_c,
 		     double m_source, double n_target, 
 		     double dt, double np,
-		     int N_coll, int data_set_length) {
-
+		     int N_coll, int data_set_length) 
+{
   int search_index;
   double sigma_total = 0.0;
   const double e = 1.602e-19;
 
+  // Get the closest search index under the target value
   search_index = searchIndex(epsilon_max, CS_energy,
 		    data_set_length);
   
+  // Find sigma_total
   for (int i = 0; i < N_coll; ++i) {
     if (search_index == data_set_length - 1) {
     sigma_total += linInterp(epsilon_max, CS_energy[search_index - 1],
@@ -171,8 +192,8 @@ int getCollType(double *CS_energy,
 		   double epsilon,
 		   double nu_max,
 		   double m_source, double n_target,
-		   int N_coll, int data_set_length) {
-
+		   int N_coll, int data_set_length)
+{
   double *P_vec = new double[N_coll + 1]; // Include P0 = 0
   double *sigma = new double[N_coll];  
   double *nu = new double[N_coll];
@@ -212,14 +233,20 @@ int getCollType(double *CS_energy,
 }
 
 
-// Take a maxwellian sample of the thermal velocity
-// Also used to simulate ion-neutral collision
+/*  thermalVelSample
+ *  Gives a particle a thermal velocity based on
+ *  Maxwellian distribution
+ *
+ *  *part_vx/y/z: Velocities to be returned
+ *  T_part: Particle temperature [K]
+ *  m_part: Particle mass [kg]
+ */
 void thermalVelSample(double *part_vx,
 			 	double *part_vy,
 				double *part_vz,
 				double T_part,
-				double m_part) {
-
+				double m_part) 
+{
   const double k_B = 1.381e-23;
   // Thermal velocity
   double v_th = sqrt(2*k_B*T_part/m_part);
@@ -243,19 +270,29 @@ void thermalVelSample(double *part_vx,
   *part_vz = f_M*v_th*sin(phi);
 }
 
+/*  e_elastic
+ *  Simulates electron-neutral elastic collision
+ *  
+ *  *partvx/y/z: velocities to be returned
+ *  epsilon: particle energy [eV]
+ *  m_e: mass of electron [kg]
+ *  m_n: mass of neutral [kg]
+ */
 void e_elastic(double *part_vx,
 		double *part_vy,
 		double *part_vz,
 		double epsilon,
 		double m_e,
-		double m_n) {
-
+		double m_n) 
+{
   double R1 = double(rand())/RAND_MAX;
   double R2 = double(rand())/RAND_MAX;
 
+  // Scattering angles
   double chi = acos((2+epsilon-2*pow(1+epsilon, R1))/epsilon);
   double phi = R2*2*M_PI;
 
+  // Scatter the velocity
   double v_newx;
   double v_newy;
   double v_newz;
@@ -277,6 +314,7 @@ void e_elastic(double *part_vx,
 	   sqrt(pow(*part_vx,2.0) + pow(*part_vy,2.0)) *
 	   sin(chi)*cos(phi);
 
+  // Energy loss correction
   double delta_epsilon = 2*m_e*(1-cos(chi))*epsilon/m_n;
   double alpha = sqrt(1-delta_epsilon/epsilon);
 
@@ -286,8 +324,14 @@ void e_elastic(double *part_vx,
 }
 
 
-// Excitation, keep epsilon_exc as positive,
-// Deexcitation, make epsilon_exc negative
+/*  e_excitation
+ *  Electron-neutral excitation collision
+ *
+ *  *part_vx/y/z: Velocity particle to be returned
+ *  epsilon_inc: energy of incident electron [eV]
+ *  epsilon_exc: excitation energy [eV]
+ *
+ */
 void e_excitation(double *part_vx,
 		double *part_vy,
 		double *part_vz,
@@ -297,10 +341,14 @@ void e_excitation(double *part_vx,
   double R1 = double(rand())/RAND_MAX;
   double R2 = double(rand())/RAND_MAX;
 
+  // Energy post collision
   double epsilon = epsilon_inc - epsilon_exc;
+
+  // Scattering angles
   double chi = acos((2+epsilon-2*pow(1+epsilon, R1))/epsilon);
   double phi = R2*2*M_PI;
 
+  // Scatter the velocity
   double v_newx;
   double v_newy;
   double v_newz;
@@ -322,6 +370,7 @@ void e_excitation(double *part_vx,
 	   sqrt(pow(*part_vx,2.0) + pow(*part_vy,2.0)) *
 	   sin(chi)*cos(phi);
 
+  // Energy correction factor
   double alpha = sqrt(1-epsilon_exc/(epsilon_inc));
 
   *part_vx = alpha*v_newx;
@@ -333,6 +382,14 @@ void e_excitation(double *part_vx,
   // COORDINGATE AS THE ELECTRON
 }
 
+/*  e_ionization
+ *  electron-neutral ionization
+ *
+ *  *part_vx/y/z: Incident electron velocity to be updated
+ *  *part_ej_vx/y/z: Ejected electron velocity to be returned
+ *  epsilon_inc: Incident electron energy [eV]
+ *  epsilon_ion: Ionization energy [eV]
+ */
 void e_ionization(double *part_vx,
 		double *part_vy,
 		double *part_vz,
@@ -383,9 +440,6 @@ void e_ionization(double *part_vx,
 	   sin(chi_ej)*cos(phi_ej);
 
   double alpha = sqrt(epsilon_ej/epsilon_inc);
-  while (isnan(alpha)) {
-    cout << "alpha 1 is wrong" << endl;
-  }
   *part_ej_vx = alpha*v_newx;
   *part_ej_vy = alpha*v_newy;
   *part_ej_vz = alpha*v_newz;
@@ -409,16 +463,21 @@ void e_ionization(double *part_vx,
 	   sin(chi_sc)*cos(phi_sc);
 
   alpha = sqrt(epsilon_sc/epsilon_inc);
-  while (isnan(alpha)) {
-    cout << "alpha 2 is wrong" << endl;
-  }
-
   *part_vx = alpha*v_newx;
   *part_vy = alpha*v_newy;
   *part_vz = alpha*v_newz;
 
 }
 
+/*  i_scattering
+ *  Ion-neutral scattering
+ *
+ *  *part_vx/y/z: Particle velocity to be returned
+ *  epsilon_inc: Incident particle energy [eV]
+ *  m_source: Incident particle mass [kg]
+ *  m_target: Target particle mass [kg]
+ *  T_target: Temperature of the target [K] *
+ */
 void i_scattering(double *part_vx,
 		double *part_vy,
 		double *part_vz,
@@ -448,7 +507,7 @@ void i_scattering(double *part_vx,
    * that m_target =/= m_source
   double alpha = 2*m_target*m_source*(1.0-cos(theta))/
 	  pow(m_source+m_target,2.0);
-*/
+  */
   double alpha = sin(chi)*sin(chi);
   double phi = 2.0*M_PI*(double (rand())/RAND_MAX);
 

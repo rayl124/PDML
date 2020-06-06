@@ -321,7 +321,7 @@ int main(void) {
     triDiagSolver(&phi[elec_range[1] + 1], a, b, c, 
 		    &RHS[elec_range[1] + 1], nn_inner);
 
-     /////////////////////////////////////////////////
+    /////////////////////////////////////////////////
     //
     // Compute electric field
     //
@@ -523,9 +523,6 @@ int main(void) {
       nu_max = 0.0;
       N_c = 0;
     }
-    cout << "N_c = " << N_c << endl;
-    cout << "nu_max = " << nu_max<<endl;
-
 
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(ion.np-1));
