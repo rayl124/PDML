@@ -1,5 +1,5 @@
-#ifndef _1DPOISSON_H
-#define _1DPOISSON_H
+#ifndef _SOLVERMODULES_H
+#define _SOLVERMODULES_H
 
 #include <iostream>
 #include <algorithm>
@@ -75,9 +75,10 @@ void jacobi_Update(double *phi,
 }
 
 // Solves a tridiagonal matrix
+// Currently used for laplace(phi) = -rho/epsilon0
 void triDiagSolver(double *phi,
 		double *a, double *b, double *c,
-		double *RHS, int nn) {
+		double *d, int nn) {
  
   double *c_prime = new double[nn];
   double *d_prime = new double[nn];
@@ -85,10 +86,10 @@ void triDiagSolver(double *phi,
   for (int i = 0; i < nn; ++i) {
     if (i == (0)) {
       c_prime[i] = c[i]/b[i];
-      d_prime[i] = RHS[i]/b[i];
+      d_prime[i] = d[i]/b[i];
     } else {
       c_prime[i] = c[i]/(b[i]-a[i]*c_prime[i-1]);
-      d_prime[i] = (RHS[i] - a[i]*d_prime[i-1])/
+      d_prime[i] = (d[i] - a[i]*d_prime[i-1])/
 	      (b[i] - a[i]*c_prime[i-1]);
     }
   }
@@ -102,5 +103,75 @@ void triDiagSolver(double *phi,
 
   delete(c_prime);
   delete(d_prime);
+}
+
+// Solves dn/dt + d(-D dn/dx)/dx = n_dot
+// Assumes D is a constant and neumann BC
+// Explicit time stepping
+void driftDiffusionFVExplicit(double *u, double *RHS,
+		      double gamma_L, double gamma_R,
+		      double D, double dx, double dt,
+		      int n_cell) 
+{
+  double *u_new = new double[n_cell];
+  
+  for (int i = 0; i < n_cell; ++i) {
+    if (i == 0) {
+      u_new[i] = (RHS[i] + gamma_L/dx + 
+		 D*((u[i+1]-u[i])/(dx*dx)))*dt + u[i];
+    } else if (i == n_cell-1) {
+      u_new[i] = (RHS[i] - gamma_R/dx - 
+		 D*((u[i]-u[i-1])/(dx*dx)))*dt + u[i];
+    } else {
+      u_new[i] = (RHS[i] + D*((u[i+1]-2.0*u[i]+u[i-1])/
+	         (dx*dx)))*dt + u[i];
+    }
+  }
+  
+  copy_n(u_new, n_cell, u);
+
+  delete(u_new);
+}
+
+// Solves dn/dt + d(-D dn/dx)/dx = n_dot
+// Assumes D is a constant and neumann BC
+// Crank Nicholson
+void driftDiffusionFV_CN(double *u, double *RHS_j, double *RHS_j1,
+		      double gamma_L, double gamma_R,
+		      double D, double dx, double dt,
+		      int n_cell) 
+{
+  double *a = new double[n_cell];
+  double *b = new double[n_cell];
+  double *c = new double[n_cell];
+  double *d = new double[n_cell];
+
+  double A = D*dt/(2.0*dx*dx);
+
+  for (int i = 0; i < n_cell; ++i) {
+    if (i == 0) {
+      a[i] = 0.0;
+      b[i] = 1.0+A;
+      c[i] = -A;
+      d[i] = A*u[i+1] + (1.0-A)*u[i] + gamma_L*dt/dx +
+	      dt*0.5*(RHS_j1[i]+RHS_j[i]);
+    }
+    else if (i == n_cell-1) {
+      a[i] = A;
+      b[i] = 1.0-A;
+      c[i] = 0.0;
+      d[i] = A*u[i-1] + (1.0-A)*u[i]  - gamma_R*dt/dx +
+	      dt*0.5*(RHS_j1[i]+RHS_j[i]);
+    }
+    else {
+      a[i] = -A;
+      b[i] = 1.0+2.0*A;
+      c[i] = -A;
+      d[i] =  A*u[i+1] + (1-2.0*A)*u[i] + A*u[i-1] +
+	      dt*0.5*(RHS_j1[i]+RHS_j[i]);
+    }
+  }
+  triDiagSolver(u, a, b, c, d, n_cell);
+
 }
 #endif

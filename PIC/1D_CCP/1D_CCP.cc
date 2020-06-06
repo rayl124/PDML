@@ -5,7 +5,7 @@
 #include <cstdlib>
 
 #include "species.h"
-#include "1D_Poisson.h"
+#include "solverModules.h"
 #include "collisionModules.h"
 
 using namespace std;
@@ -204,13 +204,13 @@ int main(void) {
   //////////////////////////////////////////////////////////
   
   int write_iter = 25; // Write every x number of iterations
-  string simNum ("009");
+  string simNum ("010");
   
   ofstream InputFile("Results/Input"+simNum+".txt");
   ofstream FieldFile("Results/ESFieldData"+simNum+".txt");
   ofstream NumFile("Results/NumberPart"+simNum+".txt");
 
-  InputFile << "Misc comments: Fixed handling of BC, compare with 008" << endl;
+  InputFile << "Misc comments: Removed el "<< endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
