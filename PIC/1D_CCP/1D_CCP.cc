@@ -261,7 +261,7 @@ int main(void) {
   FieldCCFile << "Iteration / Time / Cell x / Charge Density / ";
   FieldCCFile << "Electric Potential / Electric Field" << endl;
 
-  FieldCCFile << "Iteration / Time / Node x / Electric Field" << endl;
+  FieldNCFile << "Iteration / Time / Node x / Electric Field" << endl;
 
   //ParticleFile << "Iteration / x / v / spwt / q";
   //ParticleFile << endl;
@@ -636,7 +636,7 @@ int main(void) {
     if ((iter+1)%write_iter == 0) {
       for (int i = 0; i < n_cell; ++i) {
         FieldCCFile << iter << " " << t << " " << dx*(i+0.5) << " ";
-	FieldCCFile << rho[i] << " " << phi[i] << " ";
+	FieldCCFile << rho[i] << " " << phi[i] << " " << endl;
 	FieldNCFile << iter << " " << t << " " << dx*i << " ";
 	FieldNCFile << E_field[i]  << endl;
       }
