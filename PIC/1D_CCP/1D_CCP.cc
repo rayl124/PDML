@@ -245,7 +245,9 @@ int main(void) {
   string simNum ("011");
   
   ofstream InputFile("Results/Input"+simNum+".txt");
-  ofstream FieldFile("Results/ESFieldData"+simNum+".txt");
+  ofstream FieldCCFile("Results/ESFieldCCData"+simNum+".txt");
+  ofstream FieldNCFile("Results/ESFieldNCData"+simNum+".txt");
+
   ofstream NumFile("Results/NumberPart"+simNum+".txt");
 
   InputFile << "Misc comments: cell centered"<< endl;
@@ -256,8 +258,10 @@ int main(void) {
   InputFile << " " << f_lf << " " << ts << " " << dt << " " << nn << endl;
 
 
-  FieldFile << "Iteration / Time / Node x / Charge Density / ";
-  FieldFile << "Electric Potential / Electric Field" << endl;
+  FieldCCFile << "Iteration / Time / Cell x / Charge Density / ";
+  FieldCCFile << "Electric Potential / Electric Field" << endl;
+
+  FieldCCFile << "Iteration / Time / Node x / Electric Field" << endl;
 
   //ParticleFile << "Iteration / x / v / spwt / q";
   //ParticleFile << endl;
@@ -631,9 +635,10 @@ int main(void) {
 
     if ((iter+1)%write_iter == 0) {
       for (int i = 0; i < n_cell; ++i) {
-        FieldFile << iter << " " << t << " " << dx*(i+0.5) << " ";
-	FieldFile << rho[i] << " " << phi[i] << " ";
-	//FieldFile << E_field[i] << " "  << endl;
+        FieldCCFile << iter << " " << t << " " << dx*(i+0.5) << " ";
+	FieldCCFile << rho[i] << " " << phi[i] << " ";
+	FieldNCFile << iter << " " << t << " " << dx*i << " ";
+	FieldNCFile << E_field[i]  << endl;
       }
       /*
       for (int i = 0; i < electron.np; ++i) {
