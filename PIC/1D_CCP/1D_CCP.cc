@@ -10,7 +10,8 @@
 
 using namespace std;
 
-void get_Weights(double part_x,
+// Node centered weights
+void get_WeightsNC(double part_x,
 		 double *weights,
 		 int *node_index,
 		 double dx) {
@@ -21,7 +22,26 @@ weights[0] = 1 - hx;
 weights[1] = hx;
 }
 
-void legendrePoly(double x_target, double *x, 
+// Cell centered weights
+void get_WeightsCC(double part_x,
+		 double *weights,
+		 int *cell_index,
+		 int *elec_range,
+		 double dx) {
+
+  *cell_index = floor((part_x-0.5*dx)/dx);
+  if (*cell_index < elec_range[1]) {
+    *cell_index = elec_range[1];
+    weights[0] = 1.0;
+    weights[1] = 0.0;
+  } else {
+  double hx = (part_x -  (*cell_index + 0.5) * dx)/dx;
+  weights[0] = 1 - hx;
+  weights[1] = hx;
+  }
+}
+
+void lagrangePoly(double x_target, double *x, 
 		double *l_coeff, int order) {
 
   for (int j = 0; j < order; j++) {
@@ -59,10 +79,14 @@ int main(void) {
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
-  int ts = 200*200; // # of time steps
-  double dx= 5.0e-4; // length of each cell
+  int n_cell = nn-1; // # of cells
+  double x_start = 0.0;
+  double x_end = 0.095;
+
+  double L = x_end-x_start; // Domain length m, including electrodes
+  int ts = 200*2; // # of time steps
+  double dx= L/((double) nn-1); // length of each cell
   double dt = 1.0/(27.12e6*200.0); 
-  double L = 0.095; // Domain length m
 
   // Electrode info
   // Bias electrode left, grounded electrode right
@@ -77,6 +101,7 @@ int main(void) {
   double V_lf = 281.9; // V
   double phi_left;
   double phi_right = 0.0;
+
   double L_inner = 0.085-0.01;
 
   //////////////////////////////////////////////////////////////
@@ -131,7 +156,7 @@ int main(void) {
   electron.initialize(max_part);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e5;
+  electron.np = 1e4;
   electron.T = 300.0; //[K]
   electron.spwt = 1e14/electron.np;
   electron.gamma[0] = 0.2;
@@ -141,7 +166,7 @@ int main(void) {
   ion.initialize(max_part);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e5;
+  ion.np = 1e4;
   ion.T = 300.0; //[K]
   ion.spwt = 1e14/electron.np;
   ion.gamma[1] = 0.15;
@@ -178,19 +203,32 @@ int main(void) {
   
   // Charge density
   double *weights = new double[2];
-  double *rho = new double[nn]; // Density at each node
+  double *n_e = new double[n_cell]; // Number density at each cell center
+  double *n_i = new double[n_cell];
+  // double *n_n = new double[nn];
+  double *rho = new double[n_cell]; // Charge density at each cell center
 
   // Electric potential
-  int nn_inner = elec_range[2] - elec_range[1] - 1; // Interior nodes
-  double *phi = new double[nn];
+  double *phi = new double[n_cell];
   double t;  // time
-  double *RHS = new double[nn]; // Right hand side
-  double *a = new double[nn_inner];  // Tridiagonal coeffs
-  double *b = new double[nn_inner];
-  double *c = new double[nn_inner];
+  double *RHS = new double[n_cell]; // Right hand side
+  double *a = new double[n_cell];  // Tridiagonal coeffs
+  double *b = new double[n_cell];
+  double *c = new double[n_cell];
+
+  double *lagrangeLeft = new double[3];
+  double *lagrangeRight = new double[3];
+  double *l_coeffL = new double[3];
+  double *l_coeffR = new double[3];
+  double ghostL, ghostR;
+
+  for (int i = 0; i < 3; ++i) {
+    lagrangeLeft[i] = elec_range[1]*dx + (i - 0.5)*dx;
+    lagrangeRight[i] = elec_range[2]*dx + (i - 1.5)*dx;
+  }
 
   // Electric field
-  double *E_field = new double[nn];
+  double *E_field = new double[nn]; // electric field at the node
 
   // Move Particles
   double part_E;
@@ -204,13 +242,13 @@ int main(void) {
   //////////////////////////////////////////////////////////
   
   int write_iter = 25; // Write every x number of iterations
-  string simNum ("010");
+  string simNum ("011");
   
   ofstream InputFile("Results/Input"+simNum+".txt");
   ofstream FieldFile("Results/ESFieldData"+simNum+".txt");
   ofstream NumFile("Results/NumberPart"+simNum+".txt");
 
-  InputFile << "Misc comments: Removed el "<< endl;
+  InputFile << "Misc comments: cell centered"<< endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -240,7 +278,7 @@ int main(void) {
     // Reset variables
     electron.max_epsilon = 0.0;
     ion.max_epsilon = 0.0;
-    for (int i = 0; i< nn; ++i) {
+    for (int i = 0; i< n_cell; ++i) {
       phi[i] = 0.0;
       rho[i] = 0.0;
       E_field[i] = 0.0;
@@ -251,38 +289,44 @@ int main(void) {
     
     /////////////////////////////////////////////////////////
     //
-    // Compute ion charge density 
+    // Compute charge density 
     //
     ////////////////////////////////////////////////////////
     
-    cout << "Computing ion charge density..." << endl;
+    cout << "Computing charge density..." << endl;
 
     // Get charge from particles
     // Electrons
     for (int p = 0; p < electron.np; ++p) {
-      get_Weights(electron.x[p], weights, &electron.node_index[p], dx);
+      get_WeightsCC(electron.x[p], weights, &electron.cell_index[p],
+		     elec_range, dx);
 
-      rho[electron.node_index[p]] += electron.spwt*
+      rho[electron.cell_index[p]] += electron.spwt*
 	      			     (electron.q)*weights[0];
-      rho[electron.node_index[p]+1] += electron.spwt*
+      rho[electron.cell_index[p]+1] += electron.spwt*
 	      			       (electron.q)*weights[1];
+     
     }
     // Ions
     for (int p = 0; p < ion.np; ++p) {
-      get_Weights(ion.x[p], weights, &ion.node_index[p], dx);
+      get_WeightsCC(ion.x[p], weights, &ion.cell_index[p], 
+		      elec_range, dx);
 
-      rho[ion.node_index[p]] += ion.spwt*ion.q*weights[0];
-      rho[ion.node_index[p]+1] += ion.spwt*ion.q*weights[1];
+      rho[ion.cell_index[p]] += ion.spwt*ion.q*weights[0];
+      rho[ion.cell_index[p]+1] += ion.spwt*ion.q*weights[1];
     }
 
     // Account for volume
-    for (int i = 0; i < nn; ++i) {
+    for (int i = 0; i < n_cell; ++i) {
       rho[i] /= dx;
 
+      /*
       // If on the boundary, half the volume.
       if (i == elec_range[1] || i == elec_range[2]) {
 	rho[i] *= 2.0;
       }
+      */
+
       // Right hand side of Poisson equation
       RHS[i] = -rho[i]/epsilon0;
     }
@@ -295,31 +339,53 @@ int main(void) {
 
     cout << "Computing electric potential..." << endl;
 
-    // Dirichlet boundary
-    for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
-      phi[i] = phi_left;
-    }
-    for (int i = elec_range[2]; i <= elec_range[3]; ++i) {
-      phi[i] = phi_right;
-    }
-    
-    // Adjust RHS to account for BC
-    RHS[elec_range[1] + 1] -= phi_left/(dx*dx);
-    RHS[elec_range[2] - 1] -= phi_right/(dx*dx);
+    // Interpolation coefficients for the boundaries
+    lagrangePoly(elec_range[1]*dx, lagrangeLeft, l_coeffL, 3);
+    lagrangePoly(elec_range[2]*dx, lagrangeRight, l_coeffR, 3);
+    RHS[elec_range[1]] -= phi_left/(dx*dx*l_coeffL[0]);
+    RHS[elec_range[2] - 1] -= phi_right/(dx*dx*l_coeffR[2]);
 
     // Tridiagonal coefficients
-    for (int i = 0; i < nn_inner; ++i) {
-      a[i] = 1.0;
-      b[i] = -2.0;
-      c[i] = 1.0;
-      RHS[elec_range[1]+1+i] *= dx*dx;
+    for (int i = 0; i < n_cell; ++i) {
+      if (i >= elec_range[1] && i < elec_range[2]) {	    
+        a[i] = 1.0;
+        b[i] = -2.0;
+        c[i] = 1.0;
+        RHS[i] *= dx*dx;
+      }
+      else {
+        a[i] = 0.0;
+	b[i] = 1.0;
+	c[i] = 0.0;
+	if (i < elec_range[1]) {
+	  RHS[i] = phi_left;
+	} else {
+	  RHS[i] = phi_right;
+	}
+      }
     }
-    a[0] = 0.0;
-    c[nn_inner-1] = 0.0;
-    
+
+    // Adjust RHS to account for BC
+    a[elec_range[1]] = 0.0;
+    b[elec_range[1]] -= l_coeffL[1]/l_coeffL[0];
+    c[elec_range[1]] -= l_coeffL[2]/l_coeffL[1];
+
+    a[elec_range[2] - 1] -= l_coeffR[0]/l_coeffR[2];
+    b[elec_range[2] - 1] -= l_coeffR[1]/l_coeffR[2];
+    c[elec_range[2] - 1] = 0.0;
+     
     // Solve
-    triDiagSolver(&phi[elec_range[1] + 1], a, b, c, 
-		    &RHS[elec_range[1] + 1], nn_inner);
+    triDiagSolver(phi, a, b, c, RHS, n_cell);
+    
+    // Get ghost node values
+    ghostL = phi_left-l_coeffL[1]*phi[elec_range[1]]
+	     -l_coeffL[2]*phi[elec_range[1]+1];
+    ghostL /= l_coeffL[0];
+
+    ghostR = phi_right-l_coeffR[0]*phi[elec_range[2]-1]
+	     -l_coeffR[1]*phi[elec_range[2]];
+    ghostR /= l_coeffR[2];
+
 
     /////////////////////////////////////////////////
     //
@@ -329,17 +395,17 @@ int main(void) {
     
     cout << "Computing electric field..." << endl;
 
-    // Finite difference accuracy 2 order
+    // Finite difference
     for (int i = elec_range[1]; i <= elec_range[2]; ++i) {
       // Left
       if (i == elec_range[1]) {
-	E_field[i] = -(-0.5*phi[i+2] + 2.0*phi[i+1] - 1.5*phi[i])/dx;
+	E_field[i] = -(phi[i] - ghostL)/dx;
       } // Right
       else if (i == elec_range[2]) {
-	E_field[i] = -(0.5*phi[i-2] -2.0*phi[i-1] + 1.5*phi[i])/dx;
+	E_field[i] = -(ghostR - phi[i-1])/dx;
       }
       else {
-	E_field[i] = -(phi[i+1] - phi[i-1])/(2.0*dx);
+	E_field[i] = -(phi[i] - phi[i-1])/(dx);
       }
     }
 
@@ -353,7 +419,7 @@ int main(void) {
 
     for (int p = 0; p < electron.np; ++p) {      
       // Interpolate electric field at each particle
-      get_Weights(electron.x[p], weights, &electron.node_index[p], dx);
+      get_WeightsNC(electron.x[p], weights, &electron.node_index[p], dx);
       part_E = E_field[electron.node_index[p]]*weights[0] +
 	          E_field[electron.node_index[p] + 1]*weights[1];
 
@@ -399,7 +465,7 @@ int main(void) {
     // Boundaries
     for (int p = 0; p < ion.np; ++p) {      
       // Interpolate electric field
-      get_Weights(ion.x[p], weights, &ion.node_index[p], dx);
+      get_WeightsNC(ion.x[p], weights, &ion.node_index[p], dx);
       part_E = E_field[ion.node_index[p]]*weights[0] +
 	          E_field[ion.node_index[p] + 1]*weights[1];
 
@@ -530,23 +596,22 @@ int main(void) {
 		    nu_max, ion.m, n_n, N_coll[2], data_set_length);
     
       // switch-case for electron-neutral collisions
-      // 0 - charge exchange
-      // 1 - back scattering
-      // 2 - null
+      // 0 - isotropic
+      // 1 - charge exchange
+      // // 2 - null
       switch(type) {
         case 0:
-	  thermalVelSample(&ion.vx[rand_index], &ion.vy[rand_index],
-			  &ion.vz[rand_index], T_n, m_n);
-	  ion.epsilon[rand_index] = 0.5*ion.m*pow(getv(ion.vx[rand_index], 
-			ion.vy[rand_index], ion.vz[rand_index]),2.0)/e; //[eV]
-	  continue;
-        case 1:
 	  i_scattering(&ion.vx[rand_index], &ion.vy[rand_index],
 		       &ion.vz[rand_index], ion.epsilon[rand_index],
 		       ion.m, ion.m, T_n);
 	  ion.epsilon[rand_index] = 0.5*ion.m*pow(getv(ion.vx[rand_index], 
 			ion.vy[rand_index], ion.vz[rand_index]),2.0)/e; //[eV]
-
+	  continue;
+        case 1:
+	  thermalVelSample(&ion.vx[rand_index], &ion.vy[rand_index],
+			  &ion.vz[rand_index], T_n, m_n);
+	  ion.epsilon[rand_index] = 0.5*ion.m*pow(getv(ion.vx[rand_index], 
+			ion.vy[rand_index], ion.vz[rand_index]),2.0)/e; //[eV]
 	  continue;
         case 2:
 	  continue;
@@ -565,10 +630,10 @@ int main(void) {
     ////////////////////////////////////////////////////
 
     if ((iter+1)%write_iter == 0) {
-      for (int i = 0; i < nn; ++i) {
-        FieldFile << iter << " " << t << " " << dx*i << " ";
+      for (int i = 0; i < n_cell; ++i) {
+        FieldFile << iter << " " << t << " " << dx*(i+0.5) << " ";
 	FieldFile << rho[i] << " " << phi[i] << " ";
-	FieldFile << E_field[i] << " "  << endl;
+	//FieldFile << E_field[i] << " "  << endl;
       }
       /*
       for (int i = 0; i < electron.np; ++i) {
@@ -582,6 +647,8 @@ int main(void) {
      
     }
   }
+
+  // Clean up
   delete(elec_range);
   delete(CS_energy);
   delete(e_n_CS);
@@ -592,6 +659,10 @@ int main(void) {
   delete(RHS);
   delete(E_field);
   delete(phi);
+  delete(l_coeffL);
+  delete(l_coeffR);
+  delete(lagrangeLeft);
+  delete(lagrangeRight);
 
   
   electron.clean();

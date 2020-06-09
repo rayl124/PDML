@@ -16,6 +16,8 @@ class species {
 
     // Keeps track of global nodes the particle is between
     int *node_index;
+    // Keeps track of cell center the particle is between;
+    int *cell_index;
 
     double T;  // Temperature in K
     double m;  // Mass in kg
@@ -41,6 +43,8 @@ void species::initialize(int max_part) {
   epsilon = new double[max_part];
   // Keeps track of node closest to
   node_index = new int[max_part];
+  // Keeps track of cell center closest to
+  cell_index = new int[max_part];
   gamma = new double[2]; 
 }
 
@@ -52,6 +56,7 @@ void species::clean(void) {
   delete(vz);
   delete(epsilon);
   delete(node_index);
+  delete(cell_index);
   delete(gamma);
 }
 
@@ -64,6 +69,7 @@ void species::remove_part(int index) {
   vz[index] = vz[np-1];
   epsilon[index] = epsilon[np-1];
   node_index[index] = node_index[np-1];
+  cell_index[index] = cell_index[np-1];
   np -= 1;
 }
 

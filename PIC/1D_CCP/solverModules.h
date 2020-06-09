@@ -114,17 +114,18 @@ void driftDiffusionFVExplicit(double *u, double *RHS,
 		      int n_cell) 
 {
   double *u_new = new double[n_cell];
-  
+  double A = D*dt/(dx*dx);
+
   for (int i = 0; i < n_cell; ++i) {
     if (i == 0) {
-      u_new[i] = (RHS[i] + gamma_L/dx + 
-		 D*((u[i+1]-u[i])/(dx*dx)))*dt + u[i];
+      u_new[i] = RHS[i]*dt + gamma_L*dt/dx + 
+		 A*u[i+1] + (1.0-A)*u[i];
     } else if (i == n_cell-1) {
-      u_new[i] = (RHS[i] - gamma_R/dx - 
-		 D*((u[i]-u[i-1])/(dx*dx)))*dt + u[i];
+      u_new[i] = RHS[i]*dt - gamma_R*dt/dx + 
+		 (1.0-A)*u[i] + A*u[i-1];
     } else {
-      u_new[i] = (RHS[i] + D*((u[i+1]-2.0*u[i]+u[i-1])/
-	         (dx*dx)))*dt + u[i];
+      u_new[i] = RHS[i]*dt + A*u[i+1] + 
+	         (1.0-2.0*A)*u[i] + A*u[i-1];
     }
   }
   

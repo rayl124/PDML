@@ -61,13 +61,13 @@ int main(void) {
     //gamma_R = 0.5*(-D*M_PI*sin(3.0*M_PI*t) + -D*M_PI*sin(3.0*M_PI*(t-dt)));
     //gamma_L = 0.5*(D*exp(-t)+D*exp(-(t-dt)));
     //gamma_R= 0.5*(D*exp(-t)+D*exp(-(t-dt)))*exp(x_end);
-    //driftDiffusionFV(u_k, &RHS[(k)*n_cell], gamma_L, gamma_R,
-    //		    D, dx, dt, n_cell);
+    driftDiffusionFVExplicit(u_k, &RHS[(k-1)*n_cell], gamma_L, gamma_R,
+    		    D, dx, dt, n_cell);
     //
     gamma_L = 0.5*(-D*t-D*(t-dt));
     gamma_R = 0.5*(-D*t-D*(t-dt));
-    driftDiffusionFV_CN(u_k, &RHS[(k-1)*n_cell], &RHS[k*n_cell], gamma_L,
-		    gamma_R, D, dx, dt, n_cell);
+    //driftDiffusionFV_CN(u_k, &RHS[(k-1)*n_cell], &RHS[k*n_cell], gamma_L,
+	//	    gamma_R, D, dx, dt, n_cell);
     for (int i = 0; i < n_cell; ++i) {
       //cout << "Exact: " << u_exact[i+k*n_cell] << ", Approx: " << u_k[i] << endl;
       residual += pow((u_k[i] - u_exact[i+k*n_cell]),2.0);
