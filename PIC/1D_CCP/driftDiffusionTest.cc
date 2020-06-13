@@ -24,9 +24,10 @@ int main(void) {
   double CFL = 0.1;
   double dt =  CFL*dx/abs(D);
   if (dt > t_end) {
-    dt = t_end/1000.0;
+    dt = t_end/10000.0;
   }
   int ts = round(t_end/dt);
+  ts = ts/10;
 
   double *u_k = new double[n_cell];
   double *u_exact = new double[n_cell*ts];
@@ -43,7 +44,7 @@ int main(void) {
       x = dx*(i+0.5);	    
       u_exact[i + k*n_cell] = cos(M_PI*t)*cos(M_PI*x)+100.0;
       RHS[i + k*n_cell] = -M_PI*sin(M_PI*t)*cos(M_PI*x) +
-	      		  M_PI*M_PI*(3.75e-2*x)*(100.0*cos(M_PI*x) + cos(M_PI*t))*cos(M_PI*t)/
+	      		  M_PI*M_PI*(3.0e2*x)*(100.0*cos(M_PI*x) + cos(M_PI*t))*cos(M_PI*t)/
 			  pow(cos(M_PI*t)*cos(M_PI*x)+100.0,2.0);
       
       if (k == 0) {
@@ -57,7 +58,7 @@ int main(void) {
   for (int k = 0; k < ts; ++k) {
       for (int i = 0; i < n_cell+1; ++i) {
 	x = i*dx;
-	f[i + k*n_cell] = 3.75e-2*x;
+	f[i + k*n_cell] = 3.0e2*x;
       }
   }
   
