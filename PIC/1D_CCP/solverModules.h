@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <algorithm>
+#include <math.h>
 
 using namespace std;
 
@@ -134,6 +135,41 @@ void driftDiffusionFVExplicit(double *u, double *RHS,
   delete(u_new);
 }
 
+// Solves dn/dt + d/dx(-D dn/dx) = ndot
+// where D = f(T)/n
+// BC: n[-1] = n[n_cell] = 0.0
+void driftDiffusionFVExplicit2
+(double *u, double *RHS, double *f,
+ double n_L, double n_R, double dx,
+ double dt, int n_cell) {
+  
+  double A = 2.0*dt/(dx*dx);
+  double *u_new = new double[n_cell];
+
+  for (int i = 0; i < n_cell; ++i) {
+    if (i == 0) {
+      u_new[i] = RHS[i]*dt + 
+	       A*f[i+1]*(u[i+1] - u[i])/(u[i+1]+u[i]) - 
+	       A*f[i]*(u[i] - n_L)/(u[i] + n_L) + u[i];
+
+    } else if (i == n_cell - 1) {
+      u_new[i] = RHS[i]*dt + 
+	       A*f[i+1]*(n_R - u[i])/(n_R+u[i]) - 
+	       A*f[i]*(u[i] - u[i-1])/(u[i]+u[i-1]) + u[i];
+    } else {
+      u_new[i] = RHS[i]*dt + 
+	       A*f[i+1]*(u[i+1] - u[i])/(u[i+1]+u[i]) - 
+	       A*f[i]*(u[i] - u[i-1])/(u[i]+u[i-1]) + u[i];
+    }
+  }
+
+  copy_n(u_new, n_cell, u);
+
+  delete(u_new);
+
+
+}
+
 // Solves dn/dt + d(-D dn/dx)/dx = n_dot
 // Assumes D is a constant and neumann BC
 // Crank Nicholson
@@ -173,6 +209,21 @@ void driftDiffusionFV_CN(double *u, double *RHS_j, double *RHS_j1,
     }
   }
   triDiagSolver(u, a, b, c, d, n_cell);
+}
 
+
+// n must be odd
+double simpsons( double *f, double a,
+		double b, int n) 
+{
+  double dx = (b-a)/(n-1.0);
+  double integral = f[0];
+  integral += f[n-1];
+
+  for (int i = 1; i < n-1; ++i) {
+    if (i%2 == 1) { integral += 4.0*f[i]; }
+    else { integral += 2.0*f[i]; }
+  }
+  return dx*integral/3.0;
 }
 #endif

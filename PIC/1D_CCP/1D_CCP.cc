@@ -7,6 +7,7 @@
 #include "species.h"
 #include "solverModules.h"
 #include "collisionModules.h"
+#include "fluidModules.h"
 
 using namespace std;
 
@@ -40,6 +41,7 @@ void get_WeightsCC(double part_x,
   weights[1] = hx;
   }
 }
+
 
 void lagrangePoly(double x_target, double *x, 
 		double *l_coeff, int order) {
@@ -75,7 +77,7 @@ int main(void) {
   double phi0 = 0.0; // Reference potential
   double P = 0.3; // Pressure, [Pa]
   double T_n = 300; // Neutral temp, [K]
-  double n_n = P/(k_B*T_n); // Neutral number density, 
+  double n_n0 = P/(k_B*T_n); // Neutral number density, 
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
@@ -153,7 +155,7 @@ int main(void) {
 
   // Electron particle data
   species electron;
-  electron.initialize(max_part);
+  electron.initialize(max_part, n_cell);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
   electron.np = 1e4;
@@ -163,7 +165,7 @@ int main(void) {
 
   // Ion particle data
   species ion;
-  ion.initialize(max_part);
+  ion.initialize(max_part, n_cell);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
   ion.np = 1e4;
@@ -201,10 +203,62 @@ int main(void) {
   //
   ////////////////////////////////////////////////////////////
   
+  // Fluid density
+  double *n_n = new double[n_cell];
+  double *n_dot = new double[n_cell];
+  double D, nu_m, sigma;
+ 
+  double v_inf = sqrt(2*k_B*T_n/m_n);
+  double epsilon_LJ = 93.30*k_B; // [K] to [J]
+  double d_LJ = 3.542e-10; // [m]
+
+  double *c_HEKhrapak = new double[4]; // Coefficients from Khrapak(2014)
+  double *c_LEKhrapak = new double[4];
+
+  c_HEKhrapak[0] = -0.692;
+  c_HEKhrapak[1] = 9.594;
+  c_HEKhrapak[2] = -8.284;
+  c_HEKhrapak[3] = -2.355;
+  c_LEKhrapak[0] = -0.019;
+  c_LEKhrapak[1] = 0.038;
+  c_LEKhrapak[2] = -0.049;
+  c_LEKhrapak[3] = 0.015;
+
+  double f = 1.0;
+  /*
+  if (beta < 0.506) {
+    for (int i = 0; i < 4; ++i) {
+      f += c_HEKhrapak[i]*pow(beta,(i+1));
+    }
+    sigma = 4.507*pow(beta,1.0/6.0)*f;
+  } else {
+    for (int i = 0; i < 4; ++i) {
+      f += c_LEKhrapak[i]*pow(beta,-(i+1));
+    }
+    sigma = 9.866*pow(beta,1.0/3.0)*f;
+  }
+
+  double beta = epsilon_LJ/(0.5*m_n*v_inf*v_inf);
+
+  // Valid because epsilon_L < 1/2*m*v^2
+  sigma = 12.0*pow(2.0,1.0/3.0)*M_PI*d_LF*d_LJ*epsilon_LJ;
+  sigma *= -sqrt(2.0)*sqrt(epsilon_LJ*(5.0*m_n*v_inf*v_inf +
+	   8.0*epsilon_LJ)) + m_n*v_inf*v_inf + 4.0;
+  sigma /= pow(m_n,1.0/3.0)*pow(v_inf,2.0/3.0)*pow(
+       	   sqrt(2.0)*sqrt(epsilon_LJ*(5.0*m_n*v_inf*v_inf
+ 	   +8.0*epsilon_LJ)) - 4.0*epsilon_LJ,5.0/3.0);
+  */
+  D = diffusionCoeff(T_n, epsilon_LJ, d_LJ, P, m_n);
+
+  for (int i = 0; i < n_cell; ++i) {
+    n_dot[i] = 0.0;
+  }
+
+  double gamma_L = 0.0;
+  double gamma_R = 0.0;
+
   // Charge density
   double *weights = new double[2];
-  double *n_e = new double[n_cell]; // Number density at each cell center
-  double *n_i = new double[n_cell];
   // double *n_n = new double[nn];
   double *rho = new double[n_cell]; // Charge density at each cell center
 
@@ -233,8 +287,6 @@ int main(void) {
   // Move Particles
   double part_E;
 
-
- 
   //////////////////////////////////////////////////////////
   //
   // Output files
@@ -244,11 +296,11 @@ int main(void) {
   int write_iter = 25; // Write every x number of iterations
   string simNum ("011");
   
-  ofstream InputFile("Results/Input"+simNum+".txt");
-  ofstream FieldCCFile("Results/ESFieldCCData"+simNum+".txt");
-  ofstream FieldNCFile("Results/ESFieldNCData"+simNum+".txt");
+  ofstream InputFile("Results/InputData/Input"+simNum+".txt");
+  ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
+  ofstream FieldNCFile("Results/FieldData/FieldNCData"+simNum+".txt");
 
-  ofstream NumFile("Results/NumberPart"+simNum+".txt");
+  ofstream NumFile("Results/NumberPartData/NumberPart"+simNum+".txt");
 
   InputFile << "Misc comments: cell centered"<< endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
@@ -259,7 +311,7 @@ int main(void) {
 
 
   FieldCCFile << "Iteration / Time / Cell x / Charge Density / ";
-  FieldCCFile << "Electric Potential / Electric Field" << endl;
+  FieldCCFile << "Electric Potential / "<< endl;
 
   FieldNCFile << "Iteration / Time / Node x / Electric Field" << endl;
 
@@ -285,12 +337,30 @@ int main(void) {
     for (int i = 0; i< n_cell; ++i) {
       phi[i] = 0.0;
       rho[i] = 0.0;
+      electron.n[i] = 0.0;
+      ion.n[i] = 0.0;
       E_field[i] = 0.0;
       RHS[i] = 0.0;
+      n_n[i] = n_n0; 
     }
+    E_field[nn-1] = 0.0;
     
     cout << "Iter: " << iter << endl;
+
+    /////////////////////////////////////////////////////////
+    //
+    // Compute fluid density
+    //
+    ////////////////////////////////////////////////////////
     
+    cout << "Computing fluid density" << endl;
+
+    if (iter > 0) {
+      driftDiffusionFVExplicit(n_n, n_dot, gamma_L, gamma_R,
+		      D, dx, dt, n_cell);
+    }
+
+
     /////////////////////////////////////////////////////////
     //
     // Compute charge density 
@@ -299,16 +369,16 @@ int main(void) {
     
     cout << "Computing charge density..." << endl;
 
-    // Get charge from particles
+    // Get number densities
     // Electrons
     for (int p = 0; p < electron.np; ++p) {
       get_WeightsCC(electron.x[p], weights, &electron.cell_index[p],
 		     elec_range, dx);
 
-      rho[electron.cell_index[p]] += electron.spwt*
-	      			     (electron.q)*weights[0];
-      rho[electron.cell_index[p]+1] += electron.spwt*
-	      			       (electron.q)*weights[1];
+      electron.n[electron.cell_index[p]] += 
+	      				electron.spwt*weights[0];
+      electron.n[electron.cell_index[p]+1] += 
+	      				electron.spwt*weights[1];
      
     }
     // Ions
@@ -316,20 +386,17 @@ int main(void) {
       get_WeightsCC(ion.x[p], weights, &ion.cell_index[p], 
 		      elec_range, dx);
 
-      rho[ion.cell_index[p]] += ion.spwt*ion.q*weights[0];
-      rho[ion.cell_index[p]+1] += ion.spwt*ion.q*weights[1];
+      ion.n[ion.cell_index[p]] += ion.spwt*weights[0];
+      ion.n[ion.cell_index[p]+1] += ion.spwt*weights[1];
     }
 
     // Account for volume
     for (int i = 0; i < n_cell; ++i) {
-      rho[i] /= dx;
+      electron.n[i] /= dx;
+      ion.n[i] /= dx;
 
-      /*
-      // If on the boundary, half the volume.
-      if (i == elec_range[1] || i == elec_range[2]) {
-	rho[i] *= 2.0;
-      }
-      */
+      // Charge density
+      rho[i] = e*(ion.n[i]-electron.n[i]);
 
       // Right hand side of Poisson equation
       RHS[i] = -rho[i]/epsilon0;
@@ -602,7 +669,7 @@ int main(void) {
       // switch-case for electron-neutral collisions
       // 0 - isotropic
       // 1 - charge exchange
-      // // 2 - null
+      // 2 - null
       switch(type) {
         case 0:
 	  i_scattering(&ion.vx[rand_index], &ion.vy[rand_index],
@@ -637,6 +704,8 @@ int main(void) {
       for (int i = 0; i < n_cell; ++i) {
         FieldCCFile << iter << " " << t << " " << dx*(i+0.5) << " ";
 	FieldCCFile << rho[i] << " " << phi[i] << " " << endl;
+      }
+      for (int i = 0; i < nn; ++i) {
 	FieldNCFile << iter << " " << t << " " << dx*i << " ";
 	FieldNCFile << E_field[i]  << endl;
       }

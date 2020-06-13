@@ -32,40 +32,55 @@ int main(void) {
   double *u_exact = new double[n_cell*ts];
 
   double *RHS = new double[n_cell*ts];
+  double *f = new double[(n_cell+1)*ts];
   
-  ofstream testFile("Results/experimentFiles/lin.txt");
+  ofstream testFile("Results/experimentFiles/sin3.txt");
   testFile << "x / t / u_approx / u_exact" << endl;
   
   for (int k = 0; k < ts; ++k) {
     t = dt*k;
     for (int i = 0; i < n_cell; ++i) {
       x = dx*(i+0.5);	    
-      //u_exact[i + k*n_cell] = cos(M_PI*x)*sin(3*M_PI*t);
-      //RHS[i + k*n_cell] = 3*M_PI*cos(M_PI*x)*cos(3*M_PI*t)
-	  - D*M_PI*M_PI*cos(M_PI*x)*sin(3.0*M_PI*t);    
-      u_exact[i + k*n_cell] = t*x;
-      RHS[i + k*n_cell] = x;
+      u_exact[i + k*n_cell] = cos(M_PI*t)*cos(M_PI*x)+100.0;
+      RHS[i + k*n_cell] = -M_PI*sin(M_PI*t)*cos(M_PI*x) +
+	      		  M_PI*M_PI*(3.75e-2*x)*(100.0*cos(M_PI*x) + cos(M_PI*t))*cos(M_PI*t)/
+			  pow(cos(M_PI*t)*cos(M_PI*x)+100.0,2.0);
       
       if (k == 0) {
-        testFile <<  dx*(i+0.5) << " " << dt*k << " " <<  u_k[i] << " " << u_exact[i+k*n_cell] << endl;
+        testFile <<  dx*(i+0.5) << " " << dt*k << " " <<  u_exact[i+k*n_cell] << " " << u_exact[i+k*n_cell] << endl;
       }
     }
   }
+
   copy_n(u_exact, n_cell, u_k);
+
+  for (int k = 0; k < ts; ++k) {
+      for (int i = 0; i < n_cell+1; ++i) {
+	x = i*dx;
+	f[i + k*n_cell] = 3.75e-2*x;
+      }
+  }
+  
+  double n_L, n_R;
 
   for (int k = 1; k < ts; ++k) {
     residual = 0.0;
     norm = 0.0;
     t = dt*k;
-    //gamma_L = 0.5*(-D*M_PI*sin(3.0*M_PI*t) + -D*M_PI*sin(3.0*M_PI*(t-dt)));
-    //gamma_R = 0.5*(-D*M_PI*sin(3.0*M_PI*t) + -D*M_PI*sin(3.0*M_PI*(t-dt)));
-    //gamma_L = 0.5*(D*exp(-t)+D*exp(-(t-dt)));
-    //gamma_R= 0.5*(D*exp(-t)+D*exp(-(t-dt)))*exp(x_end);
-    driftDiffusionFVExplicit(u_k, &RHS[(k-1)*n_cell], gamma_L, gamma_R,
-    		    D, dx, dt, n_cell);
+    double x_ghost1 = -0.5*dx;
+    double x_ghost2 = (x_end+0.5*dx);
+
+    n_L = cos(M_PI*(t-dt))*cos(M_PI*x_ghost1)+100.0;
+    n_R = cos(M_PI*(t-dt))*cos(M_PI*x_ghost2)+100.0;
+
+    driftDiffusionFVExplicit2(u_k, &RHS[(k-1)*n_cell], &f[(k-1)*(n_cell+1)],
+		    n_L, n_R, dx, dt, n_cell);
+
+    //driftDiffusionFVExplicit(u_k, &RHS[(k-1)*n_cell], gamma_L, gamma_R,
+    //		    D, dx, dt, n_cell);
     //
-    gamma_L = 0.5*(-D*t-D*(t-dt));
-    gamma_R = 0.5*(-D*t-D*(t-dt));
+    //gamma_L = 0.5*(-D*t-D*(t-dt));
+    //gamma_R = 0.5*(-D*t-D*(t-dt));
     //driftDiffusionFV_CN(u_k, &RHS[(k-1)*n_cell], &RHS[k*n_cell], gamma_L,
 	//	    gamma_R, D, dx, dt, n_cell);
     for (int i = 0; i < n_cell; ++i) {
@@ -76,7 +91,7 @@ int main(void) {
       testFile <<  dx*(i+0.5) << " " << dt*k << " " <<  u_k[i] << " " << u_exact[i+k*n_cell] << endl;
     }
 
-    cout << "Error is: " << sqrt(residual)/sqrt(norm) << endl;
+    cout << "Time: " << dt*k << " Error is: " << sqrt(residual)/sqrt(norm) << endl;
    
   }
 
