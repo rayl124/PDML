@@ -24,7 +24,7 @@ int main(void) {
   double CFL = 0.1;
   double dt =  CFL*dx/abs(D);
   if (dt > t_end) {
-    dt = t_end/10000.0;
+    dt = t_end/20000.0;
   }
   int ts = round(t_end/dt);
   ts = ts/10;
