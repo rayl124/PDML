@@ -149,17 +149,19 @@ void driftDiffusionFVExplicit2
   for (int i = 0; i < n_cell; ++i) {
     if (i == 0) {
       u_new[i] = RHS[i]*dt + 
-	       A*f[i+1]*(u[i+1] - u[i])/(u[i+1]+u[i]) - 
+	       A*0.5*(f[i+1]+f[i])*(u[i+1] - u[i])/(u[i+1]+u[i]) - 
 	       A*f[i]*(u[i] - n_L)/(u[i] + n_L) + u[i];
 
     } else if (i == n_cell - 1) {
       u_new[i] = RHS[i]*dt + 
-	       A*f[i+1]*(n_R - u[i])/(n_R+u[i]) - 
-	       A*f[i]*(u[i] - u[i-1])/(u[i]+u[i-1]) + u[i];
+	       A*f[i]*(n_R - u[i])/(n_R+u[i]) - 
+	       A*0.5*(f[i]+f[i-1])*(u[i] - u[i-1])/(u[i]+u[i-1]) + 
+	       u[i];
     } else {
       u_new[i] = RHS[i]*dt + 
-	       A*f[i+1]*(u[i+1] - u[i])/(u[i+1]+u[i]) - 
-	       A*f[i]*(u[i] - u[i-1])/(u[i]+u[i-1]) + u[i];
+	       A*0.5*(f[i+1]+f[i])*(u[i+1] - u[i])/(u[i+1]+u[i]) - 
+	       A*0.5*(f[i]+f[i-1])*(u[i] - u[i-1])/(u[i]+u[i-1]) + 
+	       u[i];
     }
   }
 

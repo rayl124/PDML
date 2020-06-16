@@ -7,11 +7,11 @@
 using namespace std;
 
 int main(void) {
-  int n_cell = 64;
+  int n_cell = 128;
   //int ts = 3000;
 
   double t_end = 1.0;  
-  double x_end = 2.0;
+  double x_end = 0.032;
 
 
   double residual = 0.0;
@@ -24,10 +24,10 @@ int main(void) {
   double CFL = 0.1;
   double dt =  CFL*dx/abs(D);
   if (dt > t_end) {
-    dt = t_end/20000.0;
+    dt = 1.0e-4;
   }
   int ts = round(t_end/dt);
-  ts = ts/10;
+  ts = 1000;
 
   double *u_k = new double[n_cell];
   double *u_exact = new double[n_cell*ts];
@@ -35,17 +35,17 @@ int main(void) {
   double *RHS = new double[n_cell*ts];
   double *f = new double[(n_cell+1)*ts];
   
-  ofstream testFile("Results/experimentFiles/sin3.txt");
+  ofstream testFile("Results/experimentFiles/test.txt");
   testFile << "x / t / u_approx / u_exact" << endl;
   
   for (int k = 0; k < ts; ++k) {
     t = dt*k;
     for (int i = 0; i < n_cell; ++i) {
       x = dx*(i+0.5);	    
-      u_exact[i + k*n_cell] = cos(M_PI*t)*cos(M_PI*x)+100.0;
-      RHS[i + k*n_cell] = -M_PI*sin(M_PI*t)*cos(M_PI*x) +
-	      		  M_PI*M_PI*(3.0e2*x)*(100.0*cos(M_PI*x) + cos(M_PI*t))*cos(M_PI*t)/
-			  pow(cos(M_PI*t)*cos(M_PI*x)+100.0,2.0);
+      u_exact[i + k*n_cell] = 1e25*(cos(M_PI*t)*cos(M_PI*x)+1.0e5);
+      RHS[i + k*n_cell] = 1e25*(-M_PI*sin(M_PI*t)*cos(M_PI*x)) +
+	      		  M_PI*M_PI*(1.0e26*(cos(M_PI*x) + cos(M_PI*t))*cos(M_PI*t)/
+			  pow(cos(M_PI*t)*cos(M_PI*x)+1.0e5,2.0));
       
       if (k == 0) {
         testFile <<  dx*(i+0.5) << " " << dt*k << " " <<  u_exact[i+k*n_cell] << " " << u_exact[i+k*n_cell] << endl;
@@ -58,7 +58,7 @@ int main(void) {
   for (int k = 0; k < ts; ++k) {
       for (int i = 0; i < n_cell+1; ++i) {
 	x = i*dx;
-	f[i + k*n_cell] = 3.0e2*x;
+	f[i + k*n_cell] = 1.0e26;
       }
   }
   
@@ -71,8 +71,8 @@ int main(void) {
     double x_ghost1 = -0.5*dx;
     double x_ghost2 = (x_end+0.5*dx);
 
-    n_L = cos(M_PI*(t-dt))*cos(M_PI*x_ghost1)+100.0;
-    n_R = cos(M_PI*(t-dt))*cos(M_PI*x_ghost2)+100.0;
+    n_L = 1.0e25*(cos(M_PI*(t-dt))*cos(M_PI*x_ghost1)+1.0e5);
+    n_R = 1.0e25*(cos(M_PI*(t-dt))*cos(M_PI*x_ghost2)+1.0e5);
 
     driftDiffusionFVExplicit2(u_k, &RHS[(k-1)*n_cell], &f[(k-1)*(n_cell+1)],
 		    n_L, n_R, dx, dt, n_cell);

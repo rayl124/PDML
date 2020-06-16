@@ -1,7 +1,7 @@
 #include <iostream>
 #include "collisionModules.h"
 
-class species {
+class particles {
   int max_part;  // Max particles
 
   public:
@@ -36,7 +36,7 @@ class species {
 
 // Initializes arrays, required every time a new
 // species is created
-void species::initialize(int max_part, int n_cell) {
+void particles::initialize(int max_part, int n_cell) {
   //spwt = new double[max_part];
   x = new double[max_part];
   vx = new double[max_part];
@@ -53,7 +53,7 @@ void species::initialize(int max_part, int n_cell) {
 }
 
 // Frees memory when simulation is done
-void species::clean(void) {
+void particles::clean(void) {
   delete(x);
   delete(vx);
   delete(vy);
@@ -66,7 +66,7 @@ void species::clean(void) {
 }
 
 // Removed a particle when it leaves the domain
-void species::remove_part(int index) {
+void particles::remove_part(int index) {
   //spwt[index] = spwt[np-1];
   x[index] = x[np-1];
   vx[index] = vx[np-1];
@@ -79,7 +79,88 @@ void species::remove_part(int index) {
 }
 
 // Gives a particle a velocity from its thermal velocity
-void species::thermalVelocity(int index) {
+void particles::thermalVelocity(int index) {
   thermalVelSample(&vx[index], &vy[index], &vz[index],
 		  T, m);
+}
+
+class fluid {
+  public:
+    double *n;
+    double *n_dot;
+    double *f_coeff;
+    double *T;
+    double *v;
+    double *beta;
+
+    double m;
+
+    void initialize(int n_cell);
+    void clean(void);
+    double getMomentumCS(int index);
+    double getMax_n(int n_cell);
+};
+
+void fluid::initialize(int n_cell) {
+  n = new double[n_cell];
+  n_dot = new double[n_cell];
+  f_coeff = new double[n_cell];
+  T = new double[n_cell];
+  v = new double[n_cell];
+  beta = new double[n_cell];
+}
+
+void fluid::clean() {
+  delete(n);
+  delete(n_dot);
+  delete(f_coeff);
+  delete(T);
+  delete(v);
+  delete(beta);
+}
+
+double fluid::getMomentumCS(int index) {
+  double *c_HEKhrapak = new double[4]; // Coefficients from Khrapak(2014)
+  double *c_LEKhrapak = new double[4];
+
+  c_HEKhrapak[0] = -0.692;
+  c_HEKhrapak[1] = 9.594;
+  c_HEKhrapak[2] = -8.284;
+  c_HEKhrapak[3] = -2.355;
+  c_LEKhrapak[0] = -0.019;
+  c_LEKhrapak[1] = 0.038;
+  c_LEKhrapak[2] = -0.049;
+  c_LEKhrapak[3] = 0.015;
+
+  double f = 1.0;
+
+  double sigma;
+
+  double beta_sample = beta[index];
+
+  if (beta_sample < 0.506) {
+    for (int i = 0; i < 4; ++i) {
+      f += c_HEKhrapak[i]*pow(beta_sample,(i+1));
+    }
+    sigma = 4.507*pow(beta_sample,1.0/6.0)*f;
+  } else {
+    for (int i = 0; i < 4; ++i) {
+      f += c_LEKhrapak[i]*pow(beta_sample,-(i+1));
+    }
+    sigma = 9.866*pow(beta_sample,1.0/3.0)*f;
+  }
+
+  return sigma;
+}
+
+double fluid::getMax_n(int n_cell) {
+  double max = 0.0;
+
+  for (int i = 0; i < n_cell; ++i) {
+    if (n[i] > max) {
+      max = n[i];
+    }
+  }
+
+  return max;
 }
