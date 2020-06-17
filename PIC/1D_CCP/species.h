@@ -92,8 +92,11 @@ class fluid {
     double *T;
     double *v;
     double *beta;
+    double *D;
 
     double m;
+    double flux_L;
+    double flux_R;
 
     void initialize(int n_cell);
     void clean(void);
@@ -108,6 +111,9 @@ void fluid::initialize(int n_cell) {
   T = new double[n_cell];
   v = new double[n_cell];
   beta = new double[n_cell];
+  D = new double[n_cell];
+  flux_L = 0.0;
+  flux_R = 0.0;
 }
 
 void fluid::clean() {
@@ -117,6 +123,7 @@ void fluid::clean() {
   delete(T);
   delete(v);
   delete(beta);
+  delete(D);
 }
 
 double fluid::getMomentumCS(int index) {

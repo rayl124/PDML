@@ -34,6 +34,9 @@ void get_WeightsCC(double part_x,
     *cell_index = elec_range[1];
     weights[0] = 1.0;
     weights[1] = 0.0;
+  } else if (part_x > elec_range[2]*dx - 0.5*dx) {
+    weights[0] = 1.0;
+    weights[1] = 0.0;
   } else {
   double hx = (part_x -  (*cell_index + 0.5) * dx)/dx;
   weights[0] = 1 - hx;
@@ -219,32 +222,11 @@ int main(void) {
 
     if (i >= elec_range[1] && i < elec_range[2]) {
       neutral.n[i] = P/(k_B*neutral.T[i]);
-      neutral.v[i] = sqrt(2.0*k_B*neutral.T[i]/neutral.m);
-      neutral.beta[i] = 2.0*k_B*epsilon_LJ/(neutral.m *
-		    neutral.v[i]*neutral.v[i]);
-      neutral.f_coeff[i] = k_B*neutral.T[i]/
-	    (neutral.m*neutral.getMomentumCS(i)*1.0e-20*
-	     neutral.v[i]);
-
-    excited.n[i] = P*5.0e-5/(k_B*excited.T[i]);
-    excited.v[i] = sqrt(2.0*k_B*excited.T[i]/excited.m);
-    excited.beta[i] = 2.0*k_B*epsilon_LJ/(excited.m*
-		    excited.v[i]*excited.v[i]);
-    excited.f_coeff[i] = k_B*excited.T[i]/
-	    (excited.m*excited.getMomentumCS(i)*1.0e-20*
-	     excited.v[i]);
+      excited.n[i] = P*5.0e-5/(k_B*excited.T[i]);
     } else {
       neutral.n[i] = 0.0;
-      neutral.v[i] = 0.0;
-      neutral.beta[i] = 0.0;
-      neutral.f_coeff[i] = 0.0;
-
       excited.n[i] = 0.0;
-      excited.v[i] = 0.0;
-      excited.beta[i] = 0.0;
-      excited.f_coeff[i] = 0.0;
     }
-
   }
 
   // Charge density
@@ -260,13 +242,13 @@ int main(void) {
   double *b = new double[n_cell];
   double *c = new double[n_cell];
 
-  double *lagrangeLeft = new double[3];
-  double *lagrangeRight = new double[3];
-  double *l_coeffL = new double[3];
-  double *l_coeffR = new double[3];
+  double *lagrangeLeft = new double[2];
+  double *lagrangeRight = new double[2];
+  double *l_coeffL = new double[2];
+  double *l_coeffR = new double[2];
   double ghostL, ghostR;
 
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 2; ++i) {
     lagrangeLeft[i] = elec_range[1]*dx + (i - 0.5)*dx;
     lagrangeRight[i] = elec_range[2]*dx + (i - 1.5)*dx;
   }
@@ -285,7 +267,7 @@ int main(void) {
   //////////////////////////////////////////////////////////
   
   int write_iter = 25; // Write every x number of iterations
-  string simNum ("002");
+  string simNum ("004");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
@@ -293,7 +275,7 @@ int main(void) {
 
   ofstream NumFile("Results/NumberPartData/NumberPart"+simNum+".txt");
 
-  InputFile << "Misc comments: Included density solver"<< endl;
+  InputFile << "Misc comments: Fixed E_field bug" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -340,30 +322,6 @@ int main(void) {
 
     /////////////////////////////////////////////////////////
     //
-    // Compute fluid density
-    //
-    ////////////////////////////////////////////////////////
-    
-    cout << "Computing fluid density" << endl;
-
-    
-    if (iter > 0) {
-      driftDiffusionFVExplicit2(&neutral.n[elec_range[1]],
-		      &neutral.n_dot[elec_range[1]], 
-		      &neutral.f_coeff[elec_range[1]],
-		      neutral.n[elec_range[1]], 
-		      neutral.n[elec_range[2]-1], 
-		      dx, dt, elec_range[2]-elec_range[1]);
-      driftDiffusionFVExplicit2(&excited.n[elec_range[1]], 
-		      &excited.n_dot[elec_range[1]],
-		      &excited.f_coeff[elec_range[1]],
-		      0.0, 0.0, dx, dt, elec_range[2]-elec_range[1]);
-    }
-
-
-
-    /////////////////////////////////////////////////////////
-    //
     // Compute charge density 
     //
     ////////////////////////////////////////////////////////
@@ -402,7 +360,47 @@ int main(void) {
       // Right hand side of Poisson equation
       RHS[i] = -rho[i]/epsilon0;
     }
+
+    /////////////////////////////////////////////////////////
+    //
+    // Compute fluid density
+    //
+    ////////////////////////////////////////////////////////
     
+    cout << "Computing fluid density" << endl;
+  
+    if (iter > 0) {
+
+      for (int i = elec_range[1]; i < elec_range[2]; ++i) {
+        neutral.D[i] = 3.0*sqrt(k_B*neutral.T[i]) /
+	      (8.0*sqrt(M_PI*neutral.m)*d_LJ*d_LJ*1.0e-20);
+        neutral.D[i] /= neutral.n[i] + excited.n[i] + ion.n[i];
+
+        excited.D[i] = 3.0*sqrt(k_B*excited.T[i]) /
+	      (8.0*sqrt(M_PI*excited.m)*d_LJ*d_LJ*1.0e-20);
+        excited.D[i] /= neutral.n[i] + excited.n[i] + ion.n[i];
+      }
+
+      double n_ghostL = neutral.flux_L*dx +
+	                neutral.D[elec_range[1]]*neutral.n[elec_range[1]];
+      n_ghostL /= neutral.D[elec_range[1]];
+      double n_ghostR = neutral.flux_R*dx + 
+	                neutral.D[elec_range[2]-1]*neutral.n[elec_range[2]-1];
+      n_ghostL /= neutral.D[elec_range[2]-1];
+
+      driftDiffusionFVExplicit2(&neutral.n[elec_range[1]],
+		      &neutral.n_dot[elec_range[1]], 
+		      &neutral.D[elec_range[1]],
+		      n_ghostL, 
+		      n_ghostR, 
+		      dx, dt, elec_range[2]-elec_range[1]);
+      driftDiffusionFVExplicit2(&excited.n[elec_range[1]], 
+		      &excited.n_dot[elec_range[1]],
+		      &excited.D[elec_range[1]],
+		      0.0, 0.0, dx, dt, elec_range[2]-elec_range[1]);
+    }
+
+
     //////////////////////////////////////////////////
     //
     // Compute electric potential
@@ -412,10 +410,10 @@ int main(void) {
     cout << "Computing electric potential..." << endl;
 
     // Interpolation coefficients for the boundaries
-    lagrangePoly(elec_range[1]*dx, lagrangeLeft, l_coeffL, 3);
-    lagrangePoly(elec_range[2]*dx, lagrangeRight, l_coeffR, 3);
+    lagrangePoly(elec_range[1]*dx, lagrangeLeft, l_coeffL, 2);
+    lagrangePoly(elec_range[2]*dx, lagrangeRight, l_coeffR, 2);
     RHS[elec_range[1]] -= phi_left/(dx*dx*l_coeffL[0]);
-    RHS[elec_range[2] - 1] -= phi_right/(dx*dx*l_coeffR[2]);
+    RHS[elec_range[2] - 1] -= phi_right/(dx*dx*l_coeffR[1]);
 
     // Tridiagonal coefficients
     for (int i = 0; i < n_cell; ++i) {
@@ -440,23 +438,23 @@ int main(void) {
     // Adjust RHS to account for BC
     a[elec_range[1]] = 0.0;
     b[elec_range[1]] -= l_coeffL[1]/l_coeffL[0];
-    c[elec_range[1]] -= l_coeffL[2]/l_coeffL[1];
+    //c[elec_range[1]] -= l_coeffL[2]/l_coeffL[1];
 
-    a[elec_range[2] - 1] -= l_coeffR[0]/l_coeffR[2];
-    b[elec_range[2] - 1] -= l_coeffR[1]/l_coeffR[2];
+    //a[elec_range[2] - 1] -= l_coeffR[0]/l_coeffR[2];
+    b[elec_range[2] - 1] -= l_coeffR[0]/l_coeffR[1];
     c[elec_range[2] - 1] = 0.0;
      
     // Solve
     triDiagSolver(phi, a, b, c, RHS, n_cell);
     
     // Get ghost node values
-    ghostL = phi_left-l_coeffL[1]*phi[elec_range[1]]
-	     -l_coeffL[2]*phi[elec_range[1]+1];
+    ghostL = phi_left-l_coeffL[1]*phi[elec_range[1]];
+//	     -l_coeffL[2]*phi[elec_range[1]+1];
     ghostL /= l_coeffL[0];
 
-    ghostR = phi_right-l_coeffR[0]*phi[elec_range[2]-1]
-	     -l_coeffR[1]*phi[elec_range[2]];
-    ghostR /= l_coeffR[2];
+    ghostR = phi_right-l_coeffR[0]*phi[elec_range[2]-1];
+//	     -l_coeffR[1]*phi[elec_range[2]];
+    ghostR /= l_coeffR[1];
 
 
     /////////////////////////////////////////////////
@@ -563,6 +561,9 @@ int main(void) {
 			        electron.vy[electron.np-1],
 			       	electron.vz[electron.np-1]),2.0)/e;
 	}
+
+	if (ion.x[p] < elec_range[1]*dx) {neutral.flux_L += ion.spwt/(dt);}
+	else {neutral.flux_R += ion.spwt/(dt);}
 	ion.remove_part(p);
 	--p;
       }
@@ -835,6 +836,8 @@ int main(void) {
   
   electron.clean();
   ion.clean();
+  neutral.clean();
+  excited.clean();
 
   return 0;
 }
