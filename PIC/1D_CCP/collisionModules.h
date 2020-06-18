@@ -157,7 +157,7 @@ void getNullCollPart(double *CS_energy,
   }
 
   // Convert energy to joules then calculate velocity
-  double v = sqrt(2*e*epsilon_max/m_source); 
+  double v = sqrt(2.0*e*epsilon_max/m_source); 
   *P_max = getP(epsilon_max, sigma_total, m_source,
 			n_target, dt);
   // Returned values

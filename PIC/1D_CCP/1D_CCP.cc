@@ -74,9 +74,9 @@ int main(void) {
   const double e = 1.602e-19; // Elementary charge [C]
   const double k_B = 1.381e-23; // Boltzman constant [J/K]
   const double AMU = 1.661e-27; // Atomic Mass Unit [kg]
-
+  const double N_A = 6.022e23; // Avogadros Number
   // Input Parameters
-  double P = 0.3;
+  double P = 2.6;
 
   // Problem discretization
   int nn = 191; // # of x1 nodes
@@ -85,7 +85,8 @@ int main(void) {
   double x_end = 0.095;
 
   double L = x_end-x_start; // Domain length m, including electrodes
-  int ts = 200*100; // # of time steps
+  int ts = 200*100*200; // # of time steps
+  // Timesteps per LF * Cycles LF per HF * # HF
   double dx= L/((double) nn-1); // length of each cell
   double dt = 1.0/(27.12e6*200.0); 
 
@@ -112,12 +113,11 @@ int main(void) {
   ///////////////////////////////////////////////////////////
   
   // See cstrs.dat.txt for what each column is
-  int *N_coll = new int[4]; // Types of collisions for each reaction
+  int *N_coll = new int[3]; // Types of collisions for each reaction
   N_coll[0] = 4;
   N_coll[1] = 2;
   N_coll[2] = 2;
-  N_coll[3] = 1;
-  
+
   int data_set_length = 5996;
   double *CS_energy = new double[data_set_length]; // energy values
   double *e_n_CS = new double[N_coll[0]*data_set_length]; // electron-neutral
@@ -151,7 +151,7 @@ int main(void) {
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  double real_part = 7.5e-6*0.3*L_inner/(k_B*300.0);
+  double real_part = 7.5e-6*P*L_inner/(k_B*300.0);
 
   // Electron particle data
   particles electron;
@@ -260,31 +260,38 @@ int main(void) {
   double part_E;
   double T_n;
 
+  // Collision modules
+  double penning_rate;
+
   //////////////////////////////////////////////////////////
   //
   // Output files
   //
   //////////////////////////////////////////////////////////
   
-  int write_iter = 25; // Write every x number of iterations
-  string simNum ("004");
+  int write_iter = 200; // Write every x number of iterations
+  string simNum ("003");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
   ofstream FieldNCFile("Results/FieldData/FieldNCData"+simNum+".txt");
-
+  ofstream FieldAverageFile("Results/FieldData/FieldAverageData"+simNum+".txt");
   ofstream NumFile("Results/NumberPartData/NumberPart"+simNum+".txt");
 
-  InputFile << "Misc comments: Fixed E_field bug" << endl;
+  InputFile << "Misc comments: Changed pressure, really long" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
   InputFile << " " << ion.spwt << " " << V_hf << " " << V_lf << " " << f_hf;
   InputFile << " " << f_lf << " " << ts << " " << dt << " " << nn << endl;
 
+  double neutral_bar, excited_bar, ion_bar, electron_bar;
+  FieldAverageFile << "Iteration / Neutral Density / Excited Density / ";
+  FieldAverageFile << "Ion Density / Electron Density" << endl;
 
   FieldCCFile << "Iteration / Time / Cell x / Charge Density / ";
-  FieldCCFile << "Electric Potential / "<< endl;
+  FieldCCFile << "Electric Potential / Neutral Density / Excited Density / ";
+  FieldCCFile << "Ion Density / Electron Density"<< endl;
 
   FieldNCFile << "Iteration / Time / Node x / Electric Field" << endl;
 
@@ -449,11 +456,9 @@ int main(void) {
     
     // Get ghost node values
     ghostL = phi_left-l_coeffL[1]*phi[elec_range[1]];
-//	     -l_coeffL[2]*phi[elec_range[1]+1];
     ghostL /= l_coeffL[0];
 
     ghostR = phi_right-l_coeffR[0]*phi[elec_range[2]-1];
-//	     -l_coeffR[1]*phi[elec_range[2]];
     ghostR /= l_coeffR[1];
 
 
@@ -581,7 +586,7 @@ int main(void) {
     //
     //////////////////////////////////////////////////
     
-    cout << "Calculating collisions..." << endl;
+    cout << "Calculating electron-neutral collisions..." << endl;
 
     // Reset n_dot
     for (int i = 0; i < n_cell; ++i) {
@@ -693,7 +698,8 @@ int main(void) {
 	  continue;
       }
     }
-    
+    cout << "Calculating ion-neutral collisions..." << endl;
+
     // Ion-neutral collisions
     if (ion.np > 0) {
     getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, &nu_max, &P_max, &N_c,
@@ -740,6 +746,8 @@ int main(void) {
       }
     }
 
+    cout << "Calculating electron-excited collisions..." << endl;
+
     // Electron-excited
     if (electron.np > 0) {
     getNullCollPart(CS_energy, e_ex_CS, electron.max_epsilon, 
@@ -757,12 +765,28 @@ int main(void) {
       type = getCollType(CS_energy, e_ex_CS, electron.epsilon[rand_index],
 		    nu_max, electron.m, excited.getMax_n(n_cell), N_coll[1], data_set_length);
     
-      // switch-case for electron-neutral collisions
+      // switch-case for electron-excited collisions
       // 0 - Step Ionization
       // 1 - Superelastic (De-excitation)
       // 2 - null
       switch(type) {
         case 0:
+	  electron.np += 1;
+	  electron.vx[electron.np-1] = 0.0;
+	  electron.vy[electron.np-1] = 0.0;
+	  electron.vz[electron.np-1] = 0.0;
+	  epsilon_ion = 4.430; // From crtrs.dat.txt
+	  e_ionization(&electron.vx[rand_index], &electron.vy[rand_index],
+		  &electron.vz[rand_index], &electron.vx[electron.np-1], 
+		  &electron.vy[electron.np-1], &electron.vz[electron.np-1], 
+		  electron.epsilon[rand_index], epsilon_ion);
+	  electron.epsilon[rand_index] = 0.5*electron.m*pow(getv(electron.vx[rand_index], 
+			electron.vy[rand_index], electron.vz[rand_index]),2.0)/e; //[eV]
+	  electron.epsilon[electron.np-1] = 0.5*electron.m*
+		  pow(getv(electron.vx[electron.np-1],
+		  electron.vy[electron.np-1], 
+	 	  electron.vz[electron.np-1]),2.0)/e; //[eV]
+
 	  // Update n_dot
 	  get_WeightsCC(electron.x[rand_index], weights, 
 			  &electron.cell_index[rand_index], elec_range, dx);
@@ -784,15 +808,34 @@ int main(void) {
 		  electron.spwt*weights[0]/(dx*dt);
 	  neutral.n_dot[electron.cell_index[rand_index] + 1] +=
 		  electron.spwt*weights[1]/(dx*dt);
-
 	  continue;
         case 2:
 	  continue;
       }
     }
 
+    // Penning Excitation
+    for (int i = elec_range[1]; i < elec_range[2]; ++i) {
+      penning_rate = 5.0e-17*pow(excited.n[i], 2.0); // AR* consumed [real part/m^3s]
+      int new_ion = round(0.5*penning_rate*dx*dt/ion.spwt); // Ions formed [macro part]
+      int new_e = round(0.5*penning_rate*dx*dt/electron.spwt);
 
+      neutral.n_dot[i] += 0.5*penning_rate; // Increase in density
+      excited.n_dot[i] -= penning_rate; // Decrease in density
 
+      for (int p = 0; p < new_ion; ++p) {
+        ion.np += 1;
+	ion.x[ion.np-1] = (double(rand())/RAND_MAX)*dx + dx*i;
+        ion.thermalVelocity(ion.np-1);
+      }
+
+      for (int p = 0; p < new_e; ++p) {
+        electron.np += 1;
+	electron.x[electron.np-1] = (double(rand())/RAND_MAX)*dx + dx*i;
+	electron.thermalVelocity(electron.np-1);
+      }
+    }
+    
     cout << "End of iteration" << endl;
     cout << "electron.np = " << electron.np << endl;
     cout << "ion.np = " << ion.np << endl;
@@ -804,15 +847,33 @@ int main(void) {
     ////////////////////////////////////////////////////
 
     if ((iter+1)%write_iter == 0) {
+      neutral_bar = 0.0;
+      excited_bar = 0.0;
+      ion_bar = 0.0;
+      electron_bar = 0.0;
+
       for (int i = 0; i < n_cell; ++i) {
         FieldCCFile << iter << " " << t << " " << dx*(i+0.5) << " ";
-	FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << endl;
+	FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
+	FieldCCFile << excited.n[i] << " " << ion.n[i] << " " << electron.n[i] << endl;
+
+	neutral_bar += neutral.n[i];
+	excited_bar += excited.n[i];
+	ion_bar += ion.n[i];
+	electron_bar += electron.n[i];
       }
       for (int i = 0; i < nn; ++i) {
 	FieldNCFile << iter << " " << t << " " << dx*i << " ";
 	FieldNCFile << E_field[i]  << endl;
       }
+      
+      neutral_bar /= elec_range[2] - elec_range[1];
+      excited_bar /= elec_range[2] - elec_range[1];
+      ion_bar /= elec_range[2] - elec_range[1];
+      electron_bar /= elec_range[2] - elec_range[1];
 
+      FieldAverageFile << iter << " " << neutral_bar << " " << excited_bar;
+      FieldAverageFile << " " << ion_bar << " " << electron_bar << endl;
       NumFile << iter << " " << electron.np << " " << ion.np << endl;
      
     }
