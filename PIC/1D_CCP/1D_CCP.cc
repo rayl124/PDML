@@ -280,7 +280,7 @@ int main(void) {
   ofstream FieldAverageFile("Results/FieldData/FieldAverageData"+simNum+".txt");
   ofstream NumFile("Results/NumberPartData/NumberPart"+simNum+".txt");
 
-  InputFile << "Misc comments: change marcoparticle size" << endl;
+  InputFile << "Misc comments: 10e5 macroparticles, fluid solver in" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -377,7 +377,7 @@ int main(void) {
     ////////////////////////////////////////////////////////
     
     cout << "Computing fluid density" << endl;
-    /*
+    
     if (iter > 0) {
 
       for (int i = elec_range[1]; i < elec_range[2]; ++i) {
@@ -413,7 +413,7 @@ int main(void) {
 		      &excited.n_dot[elec_range[1]],
 		      &excited.D[elec_range[1]],
 		      0.0, 0.0, dx, dt, elec_range[2]-elec_range[1]);
-    } */
+    } 
 
     // Reset flux for next time step
     neutral.flux_L = 0.0;
@@ -616,6 +616,7 @@ int main(void) {
       N_c = 0;
     }
     cout << N_c << " " << electron.max_epsilon << endl;
+
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(electron.np-1));
       while (isnan(electron.epsilon[rand_index])) {
@@ -667,7 +668,7 @@ int main(void) {
 
 	  continue;
         case 1:
-	  epsilon_exc = 1.160330e1; // From crtrs.dat.txt
+	  epsilon_exc = 1.159330e1; // From crtrs.dat.txt
 	  e_excitation(&electron.vx[rand_index], &electron.vy[rand_index],
 		  &electron.vz[rand_index], electron.epsilon[rand_index],
 		  epsilon_exc);
@@ -693,7 +694,7 @@ int main(void) {
 		  electron.spwt*weights[1]/(dx*dt);
 	  continue;
         case 2:
-	  epsilon_exc = 1.31041e1; // From crtrs.dat.txt
+	  epsilon_exc = 1.31040e1; // From crtrs.dat.txt
 	  e_excitation(&electron.vx[rand_index], &electron.vy[rand_index],
 		  &electron.vz[rand_index], electron.epsilon[rand_index],
 		  epsilon_exc);
@@ -725,7 +726,7 @@ int main(void) {
 	  electron.vx[electron.np-1] = 0.0;
 	  electron.vy[electron.np-1] = 0.0;
 	  electron.vz[electron.np-1] = 0.0;
-	  epsilon_ion = 1.60055e1; // From crtrs.dat.txt
+	  epsilon_ion = 1.599550e1; // From crtrs.dat.txt
 	  e_ionization(&electron.vx[rand_index], &electron.vy[rand_index],
 		  &electron.vz[rand_index], &electron.vx[electron.np-1], 
 		  &electron.vy[electron.np-1], &electron.vz[electron.np-1], 
@@ -836,7 +837,7 @@ cout << N_c << endl;
 	  electron.vx[electron.np-1] = 0.0;
 	  electron.vy[electron.np-1] = 0.0;
 	  electron.vz[electron.np-1] = 0.0;
-	  epsilon_ion = 4.430; // From crtrs.dat.txt
+	  epsilon_ion = 4.425; // From crtrs.dat.txt
 	  e_ionization(&electron.vx[rand_index], &electron.vy[rand_index],
 		  &electron.vz[rand_index], &electron.vx[electron.np-1], 
 		  &electron.vy[electron.np-1], &electron.vz[electron.np-1], 
