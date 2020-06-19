@@ -189,12 +189,13 @@ void getNullCollPart(double *CS_energy,
 
 int getCollType(double *CS_energy,
 		   double *CS_data,
+		   double P_en_ionization,
 		   double epsilon,
 		   double nu_max,
 		   double m_source, double n_target,
 		   int N_coll, int data_set_length)
 {
-  double *P_vec = new double[N_coll + 1]; // Include P0 = 0
+  double *P_vec = new double[N_coll + 2]; // Include P0 = 0 and P ionization at end
   double *sigma = new double[N_coll];  
   double *nu = new double[N_coll];
   double sigma_total;
@@ -220,10 +221,11 @@ int getCollType(double *CS_energy,
     }
     P_vec[i+1] = P_vec[i+1]/nu_max;
   }
+  P_vec[N_coll + 1] = P_vec[N_coll] + P_en_ionization;
 
   double R = double(rand())/RAND_MAX;
   // if P_i < R < P_i+1, collision is type i, where tyoe N_coll is null
-  search_index = searchIndex(R, P_vec, N_coll + 1);
+  search_index = searchIndex(R, P_vec, N_coll + 2);
 
   delete(P_vec);
   delete(sigma);
@@ -290,7 +292,7 @@ void e_elastic(double *part_vx,
 
   // Scattering angles
   double chi = acos((2+epsilon-2*pow(1+epsilon, R1))/epsilon);
-  double phi = R2*2*M_PI;
+  double phi = R2*2.0*M_PI;
 
   // Scatter the velocity
   double v_newx;
@@ -315,8 +317,8 @@ void e_elastic(double *part_vx,
 	   sin(chi)*cos(phi);
 
   // Energy loss correction
-  double delta_epsilon = 2*m_e*(1-cos(chi))*epsilon/m_n;
-  double alpha = sqrt(1-delta_epsilon/epsilon);
+  double delta_epsilon = 2.0*m_e*(1.0-cos(chi))*epsilon/m_n;
+  double alpha = sqrt(1.0-delta_epsilon/epsilon);
 
   *part_vx = alpha*v_newx;
   *part_vy = alpha*v_newy;
@@ -346,7 +348,7 @@ void e_excitation(double *part_vx,
 
   // Scattering angles
   double chi = acos((2+epsilon-2*pow(1+epsilon, R1))/epsilon);
-  double phi = R2*2*M_PI;
+  double phi = R2*2.0*M_PI;
 
   // Scatter the velocity
   double v_newx;
@@ -371,7 +373,7 @@ void e_excitation(double *part_vx,
 	   sin(chi)*cos(phi);
 
   // Energy correction factor
-  double alpha = sqrt(1-epsilon_exc/(epsilon_inc));
+  double alpha = sqrt(1.0-epsilon_exc/(epsilon_inc));
 
   *part_vx = alpha*v_newx;
   *part_vy = alpha*v_newy;
@@ -411,11 +413,11 @@ void e_ionization(double *part_vx,
   double epsilon_ej = B*tan(R1*atan((epsilon_inc-epsilon_ion)/(2*B)));
   double epsilon_sc = epsilon_inc - epsilon_ion - epsilon_ej;
 
-  double chi_ej = acos((2+epsilon_ej-2*pow(1+epsilon_ej, R2))/epsilon_ej);
-  double chi_sc = acos((2+epsilon_sc-2*pow(1+epsilon_sc, R3))/epsilon_sc);
+  double chi_ej = acos((2.0+epsilon_ej-2.0*pow(1.0+epsilon_ej, R2))/epsilon_ej);
+  double chi_sc = acos((2.0+epsilon_sc-2.0*pow(1.0+epsilon_sc, R3))/epsilon_sc);
 
-  double phi_ej = R4*2*M_PI;
-  double phi_sc = R5*2*M_PI;
+  double phi_ej = R4*2.0*M_PI;
+  double phi_sc = R5*2.0*M_PI;
 
   double v_newx;
   double v_newy;

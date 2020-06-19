@@ -85,7 +85,7 @@ int main(void) {
   double x_end = 0.095;
 
   double L = x_end-x_start; // Domain length m, including electrodes
-  int ts = 200*100*200; // # of time steps
+  int ts = 200*100*6; // # of time steps
   // Timesteps per LF * Cycles LF per HF * # HF
   double dx= L/((double) nn-1); // length of each cell
   double dt = 1.0/(27.12e6*200.0); 
@@ -158,7 +158,7 @@ int main(void) {
   electron.initialize(max_part, n_cell);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = 1e4;
+  electron.np = 1e5;
   electron.T = 300.0; //[K]
   electron.spwt = real_part/electron.np;
   electron.gamma[0] = 0.2;
@@ -168,7 +168,7 @@ int main(void) {
   ion.initialize(max_part, n_cell);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = 1e4;
+  ion.np = 1e5;
   ion.T = 300.0; //[K]
   ion.spwt = real_part/electron.np;
   ion.gamma[1] = 0.15;
@@ -216,7 +216,6 @@ int main(void) {
     neutral.n_dot[i] = 0.0;
     neutral.T[i] = 300.0;
 
-
     excited.n_dot[i] = 0.0;
     excited.T[i] = 300.0;
 
@@ -261,7 +260,10 @@ int main(void) {
   double T_n;
 
   // Collision modules
-  double penning_rate;
+  int search_index;
+  double sigma, penning_rate;
+  double P_en_ionization = 0.0;
+  
 
   //////////////////////////////////////////////////////////
   //
@@ -270,7 +272,7 @@ int main(void) {
   //////////////////////////////////////////////////////////
   
   int write_iter = 200; // Write every x number of iterations
-  string simNum ("003");
+  string simNum ("004");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
@@ -278,7 +280,7 @@ int main(void) {
   ofstream FieldAverageFile("Results/FieldData/FieldAverageData"+simNum+".txt");
   ofstream NumFile("Results/NumberPartData/NumberPart"+simNum+".txt");
 
-  InputFile << "Misc comments: Changed pressure, really long" << endl;
+  InputFile << "Misc comments: change marcoparticle size" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -375,7 +377,7 @@ int main(void) {
     ////////////////////////////////////////////////////////
     
     cout << "Computing fluid density" << endl;
-  
+    /*
     if (iter > 0) {
 
       for (int i = elec_range[1]; i < elec_range[2]; ++i) {
@@ -388,12 +390,18 @@ int main(void) {
         excited.D[i] /= neutral.n[i] + excited.n[i] + ion.n[i];
       }
 
-      double n_ghostL = neutral.flux_L*dx +
-	                neutral.D[elec_range[1]]*neutral.n[elec_range[1]];
-      n_ghostL /= neutral.D[elec_range[1]];
-      double n_ghostR = neutral.flux_R*dx + 
-	                neutral.D[elec_range[2]-1]*neutral.n[elec_range[2]-1];
-      n_ghostL /= neutral.D[elec_range[2]-1];
+      // flux = flux_Ar+ + flux_Ar*
+      excited.flux_L = -0.5*excited.D[elec_range[1]] *
+	      		     excited.n[elec_range[1]]/dx;
+      excited.flux_R = 0.5*excited.D[elec_range[2]-1] *
+		      	     excited.n[elec_range[2]-1]/dx;
+      double n_ghostL = (-neutral.flux_L - excited.flux_L) * 
+	      		dx/neutral.D[elec_range[1]] +
+	      		neutral.n[elec_range[1]];
+
+      double n_ghostR = -(-neutral.flux_R - excited.flux_R) *	
+	      		dx/neutral.D[elec_range[2]-1] +
+	      		neutral.n[elec_range[2]-1];
 
       driftDiffusionFVExplicit2(&neutral.n[elec_range[1]],
 		      &neutral.n_dot[elec_range[1]], 
@@ -405,8 +413,11 @@ int main(void) {
 		      &excited.n_dot[elec_range[1]],
 		      &excited.D[elec_range[1]],
 		      0.0, 0.0, dx, dt, elec_range[2]-elec_range[1]);
-    }
+    } */
 
+    // Reset flux for next time step
+    neutral.flux_L = 0.0;
+    neutral.flux_R = 0.0;
 
     //////////////////////////////////////////////////
     //
@@ -566,8 +577,8 @@ int main(void) {
 			        electron.vy[electron.np-1],
 			       	electron.vz[electron.np-1]),2.0)/e;
 	}
-
-	if (ion.x[p] < elec_range[1]*dx) {neutral.flux_L += ion.spwt/(dt);}
+	// AR+ flux, it is subtracted in the fluid solver
+	if (ion.x[p] < elec_range[1]*dx) {neutral.flux_L -= ion.spwt/(dt);}
 	else {neutral.flux_R += ion.spwt/(dt);}
 	ion.remove_part(p);
 	--p;
@@ -604,19 +615,43 @@ int main(void) {
       nu_max = 0.0;
       N_c = 0;
     }
-
+    cout << N_c << " " << electron.max_epsilon << endl;
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(electron.np-1));
-      type = getCollType(CS_energy, e_n_CS, electron.epsilon[rand_index],
-		    nu_max, electron.m, neutral.getMax_n(n_cell),
+      while (isnan(electron.epsilon[rand_index])) {
+	  cout << "Error at 622" << endl;
+      }
+      if (electron.epsilon[rand_index] > 1.60055e1) {
+        // Use the neutral density of the cell that the randomly chose particle is in
+        type = getCollType(CS_energy, e_n_CS, P_en_ionization, electron.epsilon[rand_index], 
+		    nu_max, electron.m, neutral.n[electron.node_index[rand_index]],
 		    N_coll[0], data_set_length);
-    
+
+	// Cumulation of probability if ionization does not occur
+	if (type != (3||4) ) {
+	  search_index = searchIndex(electron.epsilon[rand_index], CS_energy, 
+			  data_set_length);
+	  sigma = linInterp(electron.epsilon[rand_index], CS_energy[search_index],
+			  CS_energy[search_index+1], e_n_CS[3*data_set_length + search_index],
+			  e_n_CS[3*data_set_length+search_index]);
+          P_en_ionization += getP(electron.epsilon[rand_index], sigma, electron.m,
+			  neutral.n[electron.node_index[rand_index]], dt);
+	}	
+      } else {
+	type = getCollType(CS_energy, e_n_CS, 0.0, electron.epsilon[rand_index], 
+		    nu_max, electron.m, neutral.n[electron.node_index[rand_index]],
+		    N_coll[0], data_set_length);
+      }
+
+      if (type == 3) {
+        type = 4;
+      }
       // switch-case for electron-neutral collisions
       // 0 - elastic
       // 1 - excitation 1
       // 2 - excitation 2
-      // 3 - ionization
-      // 4 - null
+      // 3/4 - ionization
+      // 5 - null
       switch(type) {
         case 0:
 	  e_elastic(&electron.vx[rand_index], &electron.vy[rand_index],
@@ -625,6 +660,11 @@ int main(void) {
           electron.epsilon[rand_index] = 0.5*electron.m*
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
+
+          while (isnan(electron.epsilon[rand_index])) {
+	    cout << "Error at 665" << endl;
+          }
+
 	  continue;
         case 1:
 	  epsilon_exc = 1.160330e1; // From crtrs.dat.txt
@@ -635,9 +675,14 @@ int main(void) {
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
 
+          while (isnan(electron.epsilon[rand_index])) {
+	    cout << "Error at 679" << endl;
+          }   
+
+
 	  // Update n_dot
 	  get_WeightsCC(electron.x[rand_index], weights, 
-			  &electron.cell_index[rand_index], elec_range, dx);
+			&electron.cell_index[rand_index], elec_range, dx);
 	  neutral.n_dot[electron.cell_index[rand_index]] -= 
 		  electron.spwt*weights[0]/(dx*dt);
 	  neutral.n_dot[electron.cell_index[rand_index] + 1] -=
@@ -656,9 +701,14 @@ int main(void) {
 		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 		  electron.vz[rand_index]),2.0)/e;
 
+          while (isnan(electron.epsilon[rand_index])) {
+	    cout << "Error at 705" << endl;
+          }
+
+
 	  // Update n_dot
 	  get_WeightsCC(electron.x[rand_index], weights, 
-			  &electron.cell_index[rand_index], elec_range, dx);
+		  &electron.cell_index[rand_index], elec_range, dx);
 	  neutral.n_dot[electron.cell_index[rand_index]] -= 
 		  electron.spwt*weights[0]/(dx*dt);
 	  neutral.n_dot[electron.cell_index[rand_index] + 1] -=
@@ -669,7 +719,8 @@ int main(void) {
 		  electron.spwt*weights[1]/(dx*dt);
 
 	  continue;
-        case 3:
+        case 4:
+	  P_en_ionization = 0.0;
 	  electron.np += 1;
 	  electron.vx[electron.np-1] = 0.0;
 	  electron.vy[electron.np-1] = 0.0;
@@ -685,6 +736,13 @@ int main(void) {
 		  pow(getv(electron.vx[electron.np-1],
 		  electron.vy[electron.np-1], 
 	 	  electron.vz[electron.np-1]),2.0)/e; //[eV]
+          while (isnan(electron.epsilon[rand_index])) {
+	    cout << "Error at 740" << endl;
+          }
+
+	  while (isnan(electron.epsilon[electron.np-1])) {
+	    cout << "Error at 744" << endl;
+          }
 
 	  // Update n_dot
 	  get_WeightsCC(electron.x[rand_index], weights, 
@@ -694,7 +752,7 @@ int main(void) {
 	  neutral.n_dot[electron.cell_index[rand_index] + 1] -=
 		  electron.spwt*weights[1]/(dt*dx);
 	  continue;	
-      case 4:
+        case 5:
 	  continue;
       }
     }
@@ -707,13 +765,14 @@ int main(void) {
     }  else {
       nu_max = 0.0;
       N_c = 0;
-    }
-
+    } 
+cout << N_c << endl;
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(ion.np-1));
-      type = getCollType(CS_energy, i_n_CS, ion.epsilon[rand_index],
-		    nu_max, ion.m, neutral.getMax_n(n_cell), N_coll[2], data_set_length);
-    
+      type = getCollType(CS_energy, i_n_CS, 0.0, ion.epsilon[rand_index],
+		    nu_max, ion.m, neutral.n[ion.node_index[rand_index]],
+		    N_coll[2], data_set_length);
+      if (type = 3) {type = 2;}
       // switch-case for electron-neutral collisions
       // 0 - isotropic
       // 1 - charge exchange
@@ -759,12 +818,14 @@ int main(void) {
       nu_max = 0.0;
       N_c = 0;
     }
-
+cout << N_c << endl;
     for (int i = 0; i < N_c; ++i) {
       rand_index = round((double(rand())/RAND_MAX)*(ion.np-1));
-      type = getCollType(CS_energy, e_ex_CS, electron.epsilon[rand_index],
-		    nu_max, electron.m, excited.getMax_n(n_cell), N_coll[1], data_set_length);
-    
+      type = getCollType(CS_energy, e_ex_CS, 0.0, electron.epsilon[rand_index],
+		    nu_max, electron.m, excited.n[electron.node_index[rand_index]],
+		    N_coll[1], data_set_length);
+      if (type == 3) {type = 2;}
+
       // switch-case for electron-excited collisions
       // 0 - Step Ionization
       // 1 - Superelastic (De-excitation)
@@ -786,6 +847,14 @@ int main(void) {
 		  pow(getv(electron.vx[electron.np-1],
 		  electron.vy[electron.np-1], 
 	 	  electron.vz[electron.np-1]),2.0)/e; //[eV]
+
+          while (isnan(electron.epsilon[rand_index])) {
+	    cout << "Error at 854" << endl;
+          }
+          while (isnan(electron.epsilon[electron.np-1])) {
+	    cout << "Error at 854" << endl;
+          }
+
 
 	  // Update n_dot
 	  get_WeightsCC(electron.x[rand_index], weights, 
