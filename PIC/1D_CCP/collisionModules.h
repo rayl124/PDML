@@ -126,7 +126,7 @@ double getv(double vx, double vy, double vz)
 */ 	
 void getNullCollPart(double *CS_energy,
 		     double *CS_data,
-		     double epsilon_max,
+		     double epsilon_max, double v_target,
 		     double *nu_max, double *P_max, int *N_c,
 		     double m_source, double n_target, 
 		     double dt, double np,
@@ -158,10 +158,12 @@ void getNullCollPart(double *CS_energy,
 
   // Convert energy to joules then calculate velocity
   double v = sqrt(2.0*e*epsilon_max/m_source); 
+
+  double g = v - v_target;
   *P_max = getP(epsilon_max, sigma_total, m_source,
 			n_target, dt);
   // Returned values
-  *nu_max = v*sigma_total*n_target;
+  *nu_max = g*sigma_total*n_target;
 
   // Add padding to P_max and nu_max to ensure you get the max
   // probability
@@ -222,11 +224,14 @@ int getCollType(double *CS_energy,
     P_vec[i+1] = P_vec[i+1]/nu_max;
   }
   P_vec[N_coll + 1] = P_vec[N_coll] + P_en_ionization;
-
-  double R = double(rand())/RAND_MAX;
-  // if P_i < R < P_i+1, collision is type i, where tyoe N_coll is null
-  search_index = searchIndex(R, P_vec, N_coll + 2);
-
+  
+  if (P_vec[N_coll + 1] - P_vec[N_coll - 1] > 1.0) {
+    search_index = N_coll;
+  } else {
+    double R = double(rand())/RAND_MAX;
+    // if P_i < R < P_i+1, collision is type i, where tyoe N_coll is null
+    search_index = searchIndex(R, P_vec, N_coll + 2);
+  }
   delete(P_vec);
   delete(sigma);
   delete(nu);
@@ -251,25 +256,33 @@ void thermalVelSample(double *part_vx,
 {
   const double k_B = 1.381e-23;
   // Thermal velocity
-  double v_th = sqrt(2*k_B*T_part/m_part);
+  double v_th = sqrt(k_B*T_part/m_part);
   
-  int M = 3;
-  double f_M = 0.0;
-
-  
-  // Maxwellian frequency
-  for (int j = 1; j <= M; ++j) {
-  f_M += double(rand())/RAND_MAX;
-  }
-  f_M = (f_M - M/2.0)*(1.0/(sqrt(M/12.0)));
+  double vtmp1 = sqrt(2.0)*v_th*sqrt(-log((double) rand()/RAND_MAX));
+  double vtmp2 = sqrt(2.0)*v_th*sqrt(-log((double) rand()/RAND_MAX));
 
   double phi = (double(rand())/RAND_MAX)*2*M_PI;
   double theta = (double(rand())/RAND_MAX)*2*M_PI;
 
   // Replace velocity with sampled velocity
-  *part_vx = f_M*v_th*cos(phi)*cos(theta);
-  *part_vy = f_M*v_th*cos(phi)*sin(theta);
-  *part_vz = f_M*v_th*sin(phi);
+  *part_vx = vtmp1*cos(phi);
+  *part_vy = vtmp2*sin(theta);
+  *part_vz = vtmp2*cos(theta);
+}
+
+void thermalBiasVelSample
+(double *part_vx, double *part_vy, double *part_vz,
+ double T_part, double m_part) 
+{
+  const double k_B = 1.381e-23;
+
+  double v_th = sqrt(k_B*T_part/m_part);
+  double vtmp = sqrt(2.0)*v_th*sqrt(-log((double) rand()/RAND_MAX));
+  double theta = (double(rand())/RAND_MAX)*2*M_PI;
+
+  *part_vx = sqrt(2.0)*v_th*sqrt(-log((double) rand()/RAND_MAX));
+  *part_vy = vtmp*sin(theta);
+  *part_vz = vtmp*cos(theta);
 }
 
 /*  e_elastic
@@ -510,9 +523,8 @@ void i_scattering(double *part_vx,
   double alpha = 2*m_target*m_source*(1.0-cos(theta))/
 	  pow(m_source+m_target,2.0);
   */
-  double alpha = sin(chi)*sin(chi);
+  double alpha_L = sin(chi)*sin(chi);
   double phi = 2.0*M_PI*(double (rand())/RAND_MAX);
-
 
   double v_newx;
   double v_newy;
@@ -534,6 +546,9 @@ void i_scattering(double *part_vx,
   v_newz = (*part_vz)*cos(chi) -
 	   sqrt(pow(*part_vx,2.0) + pow(*part_vy,2.0)) *
 	   sin(chi)*cos(phi);
+
+  double delta_epsilon = alpha_L*epsilon_inc;
+  double alpha = sqrt(1.0 - delta_epsilon/epsilon_inc);
 
   *part_vx = alpha*v_newx;
   *part_vy = alpha*v_newy;

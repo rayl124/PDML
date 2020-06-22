@@ -1,13 +1,13 @@
 #include <math.h>
-#include "1D_Poisson.h"
+#include "solverModules.h"
 #include <fstream>
 
 
 int main(void) {
 
 for (int nn = 16 + 1; nn < 512 + 2; nn = 2*nn - 1) {
-  //int nn = 201;
-  double dx = 1.0/(nn-1.0);
+  int n_cell = nn-1;
+  double dx = 1.0/(n_cell);
 
   // Electrode info
   // Bias electrode left, grounded electrode right
@@ -21,52 +21,58 @@ for (int nn = 16 + 1; nn < 512 + 2; nn = 2*nn - 1) {
 
 // Electric potential
   int nn_inner = elec_range[2] - elec_range[1] - 1; // Interior nodes
-  double *RHS = new double[nn];
-  double *a = new double[nn_inner];
-  double *b = new double[nn_inner];
-  double *c = new double[nn_inner];
+  double *RHS = new double[n_cell];
+  double *a = new double[n_cell];
+  double *b = new double[n_cell];
+  double *c = new double[n_cell];
 
-  double *u_exact = new double[nn];
-  double *u_approx = new double[nn];
+  double *u_exact = new double[n_cell];
+  double *u_approx = new double[n_cell];
 
-  for (int i = 0; i < nn; ++i) {
+  for (int i = 0; i < n_cell; ++i) {
     u_approx[i] = 0.0;
-    u_exact[i] = cos(M_PI*i*dx);
+    u_exact[i] = cos(M_PI*(i+0.5)*dx);
     RHS[i] = -M_PI*M_PI*u_exact[i];
   }
 
+  /*
     for (int i = elec_range[0]; i <= elec_range[1]; ++i) {
       u_approx[i] = phi_left;
-      /*if (i < elec_range[1]) {
+      if (i < elec_range[1]) {
         /phi_cc[i] = phi_left;
-      }*/
+      }
     }
     for (int i = elec_range[2]; i <= elec_range[3]; ++i) {
       u_approx[i] = phi_right;
-      /*if (i < elec_range[3]) {
+      if (i < elec_range[3]) {
         /phi_cc[i] = phi_right;
-      }*/
+      }
     }
-    
-    RHS[elec_range[1] + 1] -= phi_left/(dx*dx);
-    RHS[elec_range[2] - 1] -= phi_right/(dx*dx);
+   */
 
-    for (int i = 0; i < nn_inner; ++i) {
+
+    for (int i = 0; i < n_cell; ++i) {
       a[i] = 1.0;
       b[i] = -2.0;
       c[i] = 1.0;
-      RHS[elec_range[1]+1+i] *= dx*dx;
+      RHS[i] *= dx*dx;
     }
     a[0] = 0.0;
-    c[nn_inner-1] = 0.0;
+    b[0] -= 1.0;
+  
+    c[n_cell-1] = 0.0;
+    b[n_cell-1] -= 1.0;
+
+    RHS[0] -= 2.0*phi_left;
+    RHS[n_cell-1] -= 2.0*phi_right;
     
-    triDiagSolver(&u_approx[elec_range[1] + 1], a, b, c, 
-		    &RHS[elec_range[1] + 1], nn_inner);
+    triDiagSolver(u_approx, a, b, c, 
+		  RHS, n_cell);
 
 
   double residual = 0.0;
   double norm_exact = 0.0;
-  for (int i = 0; i < nn; ++i) {
+  for (int i = 0; i < n_cell; ++i) {
     residual += pow((u_approx[i]-u_exact[i]),2.0);
     norm_exact += pow(u_exact[i],2.0);
 

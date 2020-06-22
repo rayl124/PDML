@@ -13,17 +13,26 @@ class particles {
     double *epsilon;  // energy in eV
     double *gamma; // scattering coefficients,
     		   // 0 is reflection, 1 is secondary electron emission
-    double *n;   // Number density in m^-3
+    double *E;
 
     // Keeps track of global nodes the particle is between
     int *node_index;
     // Keeps track of cell center the particle is between;
     int *cell_index;
 
+    // Field arrays
+    double *n;   // Number density in m^-3
+    double *epsilon_bulk;
+    double *vx_bulk;
 
     double T;  // Temperature in K
     double m;  // Mass in kg
     double q;  // Charge in C
+    double bulk_v = 0.0;
+    double bulk_T = 0.0;
+    double bulk_epsilon = 0.0;
+    double flux_L = 0.0;
+    double flux_R = 0.0;
 
     double max_epsilon = 0.0;  // Max energy
     int np = 0;  // Number of current particles
@@ -32,6 +41,7 @@ class particles {
     void clean(void);
     void remove_part(int index);
     void thermalVelocity(int index);
+    void injectionVelocity(int index);
 };
 
 // Initializes arrays, required every time a new
@@ -47,8 +57,12 @@ void particles::initialize(int max_part, int n_cell) {
   node_index = new int[max_part];
   // Keeps track of cell center closest to
   cell_index = new int[max_part];
+  E = new double[max_part];
+
 
   n = new double[n_cell];
+  epsilon_bulk = new double[n_cell];
+  vx_bulk = new double[n_cell];
   gamma = new double[2]; 
 }
 
@@ -62,7 +76,10 @@ void particles::clean(void) {
   delete(node_index);
   delete(cell_index);
   delete(n);
+  delete(epsilon_bulk);
+  delete(vx_bulk);
   delete(gamma);
+  delete(E);
 }
 
 // Removed a particle when it leaves the domain
@@ -81,6 +98,11 @@ void particles::remove_part(int index) {
 // Gives a particle a velocity from its thermal velocity
 void particles::thermalVelocity(int index) {
   thermalVelSample(&vx[index], &vy[index], &vz[index],
+		  T, m);
+}
+
+void particles::injectionVelocity(int index) {
+  thermalBiasVelSample(&vx[index], &vy[index], &vz[index],
 		  T, m);
 }
 
