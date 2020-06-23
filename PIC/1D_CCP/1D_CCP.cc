@@ -170,7 +170,7 @@ int main(void) {
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = 1e4; // initial # particles
+  int init_part = 1e5; // initial # particles
   double real_part = f_ion*P*L_inner/(k_B*T_gas);
 
   // Electron particle data
@@ -298,7 +298,7 @@ int main(void) {
   //////////////////////////////////////////////////////////
   
   int write_iter = 200; // Write every x number of iterations
-  string simNum ("007");
+  string simNum ("008");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
