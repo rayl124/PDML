@@ -119,7 +119,7 @@ int main(void) {
   // Time
   // Timesteps per LF * Cycles LF per HF * # HF
   int ts_hf = 200;
-  int n_cycle = 6;
+  int n_cycle = 1;
   int ts = ts_hf*100*n_cycle; // # of time steps
   double dt = 1.0/(f_hf*((double)ts_hf)); 
 
@@ -297,16 +297,18 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
-  int write_iter = 200; // Write every x number of iterations
-  string simNum ("006");
+  int write_iter = 1000; // Write every x number of iterations
+  string simNum ("007");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
   ofstream FieldNCFile("Results/FieldData/FieldNCData"+simNum+".txt");
   ofstream FieldAverageFile("Results/FieldData/FieldAverageData"+simNum+".txt");
   ofstream NumFile("Results/NumberPartData/NumberPart"+simNum+".txt");
+  ofstream ElectronFile("Results/ParticleData/Electrons"+simNum+".txt");
+  ofstream IonFile("Results/ParticleData/Ions"+simNum+".txt");
 
-  InputFile << "Misc comments: Dr. Hara's BC" << endl;
+  InputFile << "Misc comments: Output epsilon distribution" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -323,10 +325,10 @@ int main(void) {
 
   FieldNCFile << "Iteration / Time / Node x / Electric Field" << endl;
 
-  //ParticleFile << "Iteration / x / v / spwt / q";
-  //ParticleFile << endl;
+  ElectronFile << "Iteration / Epsilon " << endl;
+  IonFile << "Iteration / Epsilon " << endl;
 
-  NumFile << "Iteration / Electron np / Ion np" << endl;
+  NumFile << "Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np" << endl;
 
   //////////////////////////////////////////////////////////////////////////////
   //
@@ -343,13 +345,6 @@ int main(void) {
     t = 0.0;
     phi_left = V_hf*sin(2*M_PI*f_hf*t) + V_lf*sin(2*M_PI*f_lf*t);
     // Reset variables
-    electron.bulk_v = 0.0;
-    electron.bulk_T = 0.0;
-    electron.bulk_epsilon = 0.0;
-    ion.bulk_v = 0.0;
-    ion.bulk_T = 0.0;
-    ion.bulk_epsilon = 0.0;
-
     null_count = 0;
     elastic_count = 0;
 
@@ -502,6 +497,12 @@ int main(void) {
 
     electron.vx_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.vx[i];
     electron.vx_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.vx[i];
+
+    if (electron.x[i] > (0.25*L_inner+x_bias) && electron.x[i] < (x_ground-0.25*L_inner)) {
+      electron.inner_np += 1;
+      ElectronFile << 0 << " " <<  electron.epsilon[i] << endl;
+    }
+
   }
   for (int i = 0; i < ion.np; ++i) {
     get_WeightsCC(ion.x[i], weights, &ion.cell_index[i],
@@ -512,7 +513,13 @@ int main(void) {
 
     ion.vx_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.vx[i];
     ion.vx_bulk[ion.cell_index[i]+1] += ion.spwt*weights[1]*ion.vx[i];
+
+    if (ion.x[i] > (0.25*L_inner+x_bias) && ion.x[i] < (x_ground-0.25*L_inner)) {
+      ion.inner_np += 1;
+      IonFile << 0 << " " << ion.epsilon[i] << endl;
+    }
   }
+
 
 
   for (int i = 0; i < n_cell; ++i) {
@@ -546,8 +553,9 @@ int main(void) {
   electron_bar /= elec_range[2] - elec_range[1];
 
   FieldAverageFile << 0  << " " << neutral_bar << " " << excited_bar;
-  FieldAverageFile << " " << ion_bar << " " << electron_bar << " " << electron.bulk_T << endl;
-  NumFile << 0 << " " << electron.np << " " << ion.np << endl;
+  FieldAverageFile << " " << ion_bar << " " << electron_bar << endl;
+  NumFile << 0 << " " << electron.np << " " << ion.np << " ";
+  NumFile << electron.inner_np << " " << ion.inner_np << endl;
  
 /////////////////////////////////////////////////////////////////////////////////////////////////  
   //////////////////////////////////////////////////////////
@@ -919,15 +927,7 @@ int main(void) {
     phi_left = V_hf*sin(2*M_PI*f_hf*t) + V_lf*sin(2*M_PI*f_lf*t);
     // Reset variables
     electron.max_epsilon = 0.0;
-    electron.bulk_v = 0.0;
-    electron.bulk_T = 0.0;
-    electron.bulk_epsilon = 0.0;
-
     ion.max_epsilon = 0.0;
-    ion.bulk_v = 0.0;
-    ion.bulk_T = 0.0;
-    ion.bulk_epsilon = 0.0;
-
     null_count = 0;
     elastic_count = 0;
 
@@ -1282,7 +1282,10 @@ int main(void) {
       neutral_bar = 0.0;
       excited_bar = 0.0;
       ion_bar = 0.0;
+      ion.inner_np = 0;
       electron_bar = 0.0;
+      electron.inner_np = 0;
+      
       for (int i = 0; i < n_cell; ++i) {
         electron.epsilon_bulk[i] = 0.0;
 	electron.vx_bulk[i] = 0.0;
@@ -1299,6 +1302,12 @@ int main(void) {
 
         electron.vx_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.vx[i];
         electron.vx_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.vx[i];
+
+	if (electron.x[i] > (0.25*L_inner+x_bias) && electron.x[i] < (x_ground-0.25*L_inner)) {
+	  electron.inner_np += 1;
+	  ElectronFile << iter << " " <<  electron.epsilon[i] << endl;
+	}
+
       }
       for (int i = 0; i < ion.np; ++i) {
         get_WeightsCC(ion.x[i], weights, &ion.cell_index[i],
@@ -1309,6 +1318,12 @@ int main(void) {
 
         ion.vx_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.vx[i];
         ion.vx_bulk[ion.cell_index[i]+1] += ion.spwt*weights[1]*ion.vx[i];
+
+	if (ion.x[i] > (0.25*L_inner+x_bias) && ion.x[i] < (x_ground-0.25*L_inner)) {
+	  ion.inner_np += 1;
+	  IonFile << iter << " " << ion.epsilon[i] << endl;
+	}
+
       }
 
       for (int i = 0; i < n_cell; ++i) {
@@ -1320,6 +1335,7 @@ int main(void) {
         ion.vx_bulk[i] /= ion.n[i];
         ion.epsilon_bulk[i] /= ion.n[i];
       }
+
         FieldCCFile << iter << " " << t << " " << dx*(i+0.5) << " ";
         FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
         FieldCCFile << excited.n[i] << " " << ion.n[i] << " " << electron.n[i] << " ";
@@ -1341,15 +1357,10 @@ int main(void) {
       ion_bar /= elec_range[2] - elec_range[1];
       electron_bar /= elec_range[2] - elec_range[1];
 
-      for (int i = 0; i < electron.np; ++i) {
-        electron.bulk_v += electron.spwt*getv(electron.vx[i], electron.vy[i], electron.vz[i])/dx;
-	electron.bulk_T += electron.epsilon[i];
-      }
-      electron.bulk_T /= electron.np;
-
       FieldAverageFile << iter << " " << neutral_bar << " " << excited_bar;
-      FieldAverageFile << " " << ion_bar << " " << electron_bar << " " << electron.bulk_T << endl;
-      NumFile << iter << " " << electron.np << " " << ion.np << endl;
+      FieldAverageFile << " " << ion_bar << " " << electron_bar << " " << endl;
+      NumFile << iter << " " << electron.np << " " << ion.np << " ";
+      NumFile << electron.inner_np << " " << ion.inner_np << endl;
       
     }
   }

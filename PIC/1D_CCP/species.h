@@ -28,14 +28,13 @@ class particles {
     double T;  // Temperature in K
     double m;  // Mass in kg
     double q;  // Charge in C
-    double bulk_v = 0.0;
-    double bulk_T = 0.0;
-    double bulk_epsilon = 0.0;
     double flux_L = 0.0;
     double flux_R = 0.0;
 
     double max_epsilon = 0.0;  // Max energy
     int np = 0;  // Number of current particles
+    int inner_np = 0; // Particles in the middle 50% of the domain
+
 
     void initialize(int max_part, int n_cell);
     void clean(void);

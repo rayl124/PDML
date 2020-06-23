@@ -1,0 +1,2 @@
+Iteration / Neutral Density / Excited Density / Ion Density / Electron Density
+0 7.24071e+19 3.62036e+15 5.43053e+14 5.43053e+14
