@@ -1092,15 +1092,6 @@ int main(void) {
 			      0.0, 0.0, dx, dt, elec_range[2]-elec_range[1],
 			      &excited.flux_L, &excited.flux_R);
 
-    /*
-    double n_ghostL = (-ion.flux_L - excited.flux_L) * 
-	      		dx/neutral.D[elec_range[1]] +
-	      		neutral.n[elec_range[1]];
-
-    double n_ghostR = -(-ion.flux_R - excited.flux_R) *	
-	      		dx/neutral.D[elec_range[2]-1] +
-	      		neutral.n[elec_range[2]-1];
-*/
     double n_ghostL = neutral.n[elec_range[1]];
     double n_ghostR = neutral.n[elec_range[2]-1];
 
@@ -1111,7 +1102,7 @@ int main(void) {
 			      dx, dt, elec_range[2]-elec_range[1],
 			      &excited.flux_L, &excited.flux_R);
 
-    /*
+    
     neutral.n[elec_range[1]] += -dt/dx*excited.flux_L;
     neutral.n[elec_range[2]-1] += dt/dx*excited.flux_R;
 
