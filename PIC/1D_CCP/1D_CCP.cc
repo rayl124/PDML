@@ -297,7 +297,7 @@ int main(void) {
   //
   //////////////////////////////////////////////////////////
   
-  int write_iter = 1000; // Write every x number of iterations
+  int write_iter = 200; // Write every x number of iterations
   string simNum ("007");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
