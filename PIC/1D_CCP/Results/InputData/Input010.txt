@@ -1,0 +1,3 @@
+Misc comments: Fixed ion bug, not cumulative probability
+Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes
+0.3 10000 10000 4.0729e+09 4.0729e+09 110 281.9 2.712e+07 271200 200000 1.84366e-10 191

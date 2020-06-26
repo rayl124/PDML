@@ -119,7 +119,7 @@ int main(void) {
   // Time
   // Timesteps per LF * Cycles LF per HF * # HF
   int ts_hf = 200;
-  int n_cycle = 1;
+  int n_cycle = 10;
   int ts = ts_hf*100*n_cycle; // # of time steps
   double dt = 1.0/(f_hf*((double)ts_hf)); 
 
@@ -170,7 +170,7 @@ int main(void) {
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = 1e5; // initial # particles
+  int init_part = 1e4; // initial # particles
   double real_part = f_ion*P*L_inner/(k_B*T_gas);
 
   // Electron particle data
@@ -287,6 +287,7 @@ int main(void) {
  
   // Collision modules
   int search_index;
+  int ionized_num = 0;
   double sigma, penning_rate;
   double P_en_ionization = 0.0;
   
@@ -298,7 +299,8 @@ int main(void) {
   //////////////////////////////////////////////////////////
   
   int write_iter = 200; // Write every x number of iterations
-  string simNum ("008");
+  int energy_output = 0;
+  string simNum ("010");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
@@ -308,7 +310,7 @@ int main(void) {
   ofstream ElectronFile("Results/ParticleData/Electrons"+simNum+".txt");
   ofstream IonFile("Results/ParticleData/Ions"+simNum+".txt");
 
-  InputFile << "Misc comments: Output epsilon distribution" << endl;
+  InputFile << "Misc comments: Fixed ion bug, not cumulative probability" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -324,9 +326,11 @@ int main(void) {
   FieldCCFile << "Ion Density / Electron Density"<< endl;
 
   FieldNCFile << "Iteration / Time / Node x / Electric Field" << endl;
-
-  ElectronFile << "Iteration / Epsilon " << endl;
-  IonFile << "Iteration / Epsilon " << endl;
+ 
+  if (energy_output == 1) {
+    ElectronFile << "Iteration / Epsilon " << endl;
+    IonFile << "Iteration / Epsilon " << endl;
+  }
 
   NumFile << "Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np" << endl;
 
@@ -473,7 +477,7 @@ int main(void) {
     // Interpolate electric field
     get_WeightsNC(ion.x[p], weights, &ion.node_index[p], dx);
     ion.E[p] = E_field[ion.node_index[p]]*weights[0] +
-	      E_field[ion.node_index[p] + 1]*weights[1];
+	       E_field[ion.node_index[p] + 1]*weights[1];
   }
 
   ////////////////////////////////////////////////////
@@ -642,8 +646,8 @@ int main(void) {
 	  sigma = linInterp(electron.epsilon[rand_index], CS_energy[search_index],
 			  CS_energy[search_index+1], e_n_CS[3*data_set_length + search_index],
 			  e_n_CS[3*data_set_length+search_index]);
-          P_en_ionization += (getP(electron.epsilon[rand_index], sigma, electron.m,
-			  neutral.n[electron.node_index[rand_index]], dt))/P_max;
+          //P_en_ionization += (getP(electron.epsilon[rand_index], sigma, electron.m,
+	  //		  neutral.n[electron.node_index[rand_index]], dt))/P_max;
 	}	
       } else {
 	type = getCollType(CS_energy, e_n_CS, 0.0, electron.epsilon[rand_index], 
@@ -702,7 +706,7 @@ int main(void) {
 		  electron.spwt*weights[1]/(dx*dt);
 	  continue;
         case 2:
-	  epsilon_exc = 1.31040e1; // From crtrs.dat.txt
+	  epsilon_exc = 1.30940e1; // From crtrs.dat.txt
 	  e_excitation(&electron.vx[rand_index], &electron.vy[rand_index],
 		  &electron.vz[rand_index], electron.epsilon[rand_index],
 		  epsilon_exc);
@@ -729,6 +733,7 @@ int main(void) {
 
 	  continue;
         case 4:
+	  ionized_num += 1;
 	  P_en_ionization = 0.0;
 	  electron.np += 1;
 	  electron.x[electron.np-1] = electron.x[rand_index];
@@ -746,6 +751,15 @@ int main(void) {
 		  pow(getv(electron.vx[electron.np-1],
 		  electron.vy[electron.np-1], 
 	 	  electron.vz[electron.np-1]),2.0)/e; //[eV]
+
+	  // Create ion
+	  ion.np += 1;
+	  ion.x[ion.np-1] = electron.x[rand_index];
+	  ion.thermalVelocity(ion.np-1);
+    	  ion.epsilon[ion.np-1] = 0.5*ion.m*pow(getv(ion.vx[ion.np-1], ion.vy[ion.np-1],
+		          ion.vz[ion.np-1]),2.0)/e;
+
+
           while (isnan(electron.epsilon[rand_index])) {
 	    cout << "Error at 740" << endl;
           }
@@ -1123,7 +1137,6 @@ int main(void) {
       ion.n[i] = 0.0;
     }
 
-
     // Get number densities
     // Electrons
     for (int p = 0; p < electron.np; ++p) {
@@ -1303,9 +1316,12 @@ int main(void) {
         electron.vx_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.vx[i];
         electron.vx_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.vx[i];
 
+	
 	if (electron.x[i] > (0.25*L_inner+x_bias) && electron.x[i] < (x_ground-0.25*L_inner)) {
 	  electron.inner_np += 1;
-	  ElectronFile << iter << " " <<  electron.epsilon[i] << endl;
+	  if (energy_output == 1) {
+	    ElectronFile << iter << " " <<  electron.epsilon[i] << endl;
+	  }
 	}
 
       }
@@ -1321,7 +1337,9 @@ int main(void) {
 
 	if (ion.x[i] > (0.25*L_inner+x_bias) && ion.x[i] < (x_ground-0.25*L_inner)) {
 	  ion.inner_np += 1;
-	  IonFile << iter << " " << ion.epsilon[i] << endl;
+	  if (energy_output == 1) {
+	    IonFile << iter << " " << ion.epsilon[i] << endl;
+	  }
 	}
 
       }
