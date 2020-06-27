@@ -261,8 +261,8 @@ void thermalVelSample(double *part_vx,
   double vtmp1 = sqrt(2.0)*v_th*sqrt(-log((double) rand()/RAND_MAX));
   double vtmp2 = sqrt(2.0)*v_th*sqrt(-log((double) rand()/RAND_MAX));
 
-  double phi = (double(rand())/RAND_MAX)*2*M_PI;
-  double theta = (double(rand())/RAND_MAX)*2*M_PI;
+  double phi = (double(rand())/RAND_MAX)*2.0*M_PI;
+  double theta = (double(rand())/RAND_MAX)*2.0*M_PI;
 
   // Replace velocity with sampled velocity
   *part_vx = vtmp1*cos(phi);
