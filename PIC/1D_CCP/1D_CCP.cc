@@ -79,7 +79,7 @@ int main(void) {
   const double N_A = 6.022e23; // Avogadros Number
 
   // Input Parameters
-  double P = 0.3; //[Pa]
+  double P = 1.4; //[Pa]
   double T_gas = 300.0; // [K]
   double f_ground = 1.0;
   double f_excite = 5.0e-5;
@@ -309,7 +309,7 @@ int main(void) {
   
   int write_iter = 200; // Write every x number of iterations
   int energy_output = 0;
-  string simNum ("012");
+  string simNum ("013");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
@@ -320,7 +320,7 @@ int main(void) {
   ofstream IonFile("Results/ParticleData/Ions"+simNum+".txt");
   ofstream TimerFile("Results/TimerData/Timer"+simNum+".txt");
 
-  InputFile << "Misc comments: Increased length of time" << endl;
+  InputFile << "Misc comments: Increased Pressure" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -1513,8 +1513,8 @@ int main(void) {
   excited.clean();
 
   auto stop_total = steady_clock::now();
-  duration = duration_cast<minutes>(stop_total-start_total);
-  cout << "Total minutes: " << duration.count() << endl;
+  auto duration_total = duration_cast<minutes>(stop_total-start_total);
+  cout << "Total minutes: " << duration_total.count() << endl;
 
   return 0;
 }
