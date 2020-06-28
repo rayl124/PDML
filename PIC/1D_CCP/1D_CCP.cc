@@ -172,7 +172,7 @@ int main(void) {
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = 1e4; // initial # particles
+  int init_part = 1e5; // initial # particles
   double real_part = f_ion*P*L_inner/(k_B*T_gas);
 
   // Electron particle data
@@ -295,9 +295,11 @@ int main(void) {
   //e-ex vars
   double R10, R11, Rtmp1, atmp1, vtmp1, theta1;
 
-  auto start = high_resolution_clock::now();
-  auto stop = high_resolution_clock::now();
+  auto start = steady_clock::now();
+  auto stop = steady_clock::now();
   auto duration = duration_cast<microseconds>(stop-start);
+
+  auto start_total = steady_clock::now();
 
   //////////////////////////////////////////////////////////
   //
@@ -307,7 +309,7 @@ int main(void) {
   
   int write_iter = 200; // Write every x number of iterations
   int energy_output = 0;
-  string simNum ("011");
+  string simNum ("012");
   
   ofstream InputFile("Results/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
@@ -318,7 +320,7 @@ int main(void) {
   ofstream IonFile("Results/ParticleData/Ions"+simNum+".txt");
   ofstream TimerFile("Results/TimerData/Timer"+simNum+".txt");
 
-  InputFile << "Misc comments: Added Hara's comments/Timer" << endl;
+  InputFile << "Misc comments: Increased length of time" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -595,7 +597,7 @@ int main(void) {
     //
     //////////////////////////////////////////////////
 
-    start = high_resolution_clock::now();
+    start = steady_clock::now();
     
     // Reset n_dot
     for (int i = 0; i < n_cell; ++i) {
@@ -971,7 +973,7 @@ int main(void) {
       neutral.n_dot[i] += penning_rate; // Increase in density
       excited.n_dot[i] -= 2.0*penning_rate; // Decrease in density
     }
-    stop = high_resolution_clock::now();
+    stop = steady_clock::now();
     duration = duration_cast<microseconds>(stop-start);
     auto time_coll = duration.count();
         
@@ -1004,7 +1006,7 @@ int main(void) {
     //////////////////////////////////////////////////
 
     cout << "Moving Particles..." << endl;
-    start = high_resolution_clock::now();
+    start = steady_clock::now();
 
     electron.flux_L = 0.0;
     electron.flux_R = 0.0;
@@ -1115,7 +1117,7 @@ int main(void) {
         ion.max_epsilon = ion.epsilon[p];
       }
     }
-    stop = high_resolution_clock::now();
+    stop = steady_clock::now();
     duration = duration_cast<microseconds>(stop - start);
     auto time_push1 = duration.count();
 
@@ -1129,7 +1131,7 @@ int main(void) {
     ////////////////////////////////////////////////////////
     
     cout << "Computing fluid density" << endl;
-    start = high_resolution_clock::now();
+    start = steady_clock::now();
 
     double n_tot;
  
@@ -1179,7 +1181,7 @@ int main(void) {
       cout << "Error: Ion is generated" << endl;
     }
 
-    stop = high_resolution_clock::now();
+    stop = steady_clock::now();
     duration = duration_cast<microseconds>(stop-start);
     auto time_fluid = duration.count();
 
@@ -1192,7 +1194,7 @@ int main(void) {
     
     cout << "Computing charge density..." << endl;
 
-    start = high_resolution_clock::now();
+    start = steady_clock::now();
 
     for (int i = 0; i< n_cell; ++i) {
       electron.n[i] = 0.0;
@@ -1226,7 +1228,7 @@ int main(void) {
       // Charge density
       rho[i] = e*(ion.n[i]-electron.n[i]);
     }
-    stop = high_resolution_clock::now();
+    stop = steady_clock::now();
     duration = duration_cast<microseconds>(stop-start);
     auto time_rho = duration.count();
 
@@ -1238,7 +1240,7 @@ int main(void) {
 
     cout << "Computing electric potential..." << endl;
 
-    start = high_resolution_clock::now();
+    start = steady_clock::now();
 
     // Tridiagonal coefficients
     for (int i = 0; i < n_cell; ++i) {
@@ -1276,7 +1278,7 @@ int main(void) {
     ghostL = 2.0*phi_left - phi[elec_range[1]];
     ghostR = 2.0*phi_right - phi[elec_range[2]-1];
 
-    stop = high_resolution_clock::now();
+    stop = steady_clock::now();
     duration = duration_cast<microseconds>(stop-start);
     auto time_phi = duration.count();
 
@@ -1290,7 +1292,7 @@ int main(void) {
     
     cout << "Computing electric field..." << endl;
 
-    start = high_resolution_clock::now();
+    start = steady_clock::now();
 
     // Finite difference cell_interface
     for (int i = elec_range[1]; i <= elec_range[2]; ++i) {
@@ -1309,7 +1311,7 @@ int main(void) {
       }
     }
 
-    stop = high_resolution_clock::now();
+    stop = steady_clock::now();
     duration = duration_cast<microseconds>(stop-start);
     auto time_E = duration.count();
 
@@ -1323,7 +1325,7 @@ int main(void) {
 
     cout << "Moving Particles..." << endl;
 
-    start = high_resolution_clock::now();
+    start = steady_clock::now();
 
     for (int p = 0; p < electron.np; ++p) {      
       // Interpolate electric field at each particle
@@ -1364,7 +1366,7 @@ int main(void) {
       }
     }
 
-    stop = high_resolution_clock::now();
+    stop = steady_clock::now();
     duration = duration_cast<microseconds>(stop-start);
     auto time_push2 = duration.count();
 
@@ -1509,6 +1511,10 @@ int main(void) {
   ion.clean();
   neutral.clean();
   excited.clean();
+
+  auto stop_total = steady_clock::now();
+  duration = duration_cast<minutes>(stop_total-start_total);
+  cout << "Total minutes: " << duration.count() << endl;
 
   return 0;
 }
