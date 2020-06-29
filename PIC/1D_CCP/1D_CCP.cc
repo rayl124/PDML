@@ -4,6 +4,8 @@
 #include <fstream>
 #include <cstdlib>
 #include <chrono>
+#include "mpi.h"
+#include <stdio.h>
 
 #include "species.h"
 #include "solverModules.h"
@@ -11,6 +13,18 @@
 
 using namespace std;
 using namespace std::chrono;
+
+
+//////////////////////////////////////////////////////////////////////
+//
+//  1D_CCP
+//  Runs 1D PIC/MCC low temperature simulation
+//  
+//  To run: mpirun -n (# of processors) ./1D_CCP
+//
+//  Made by: Raymond Lau for PDML
+//
+////////////////////////////////////////////////////////////////////
 
 // Node centered weights
 void get_WeightsNC(double part_x,
@@ -67,9 +81,15 @@ void lagrangePoly(double x_target, double *x,
 //                                                                    //
 ////////////////////////////////////////////////////////////////////////
 
-int main(void) {
+int main(int argc, char **argv) 
+{  
+  MPI_Init(&argc, &argv);
+  int mpi_rank, mpi_size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+ 
   // Random Seed
-  srand(time(NULL));
+  srand(mpi_rank*time(NULL));
 
   // Constants
   const double epsilon0 = 8.854e-12; // Permittivity of free space
@@ -79,7 +99,7 @@ int main(void) {
   const double N_A = 6.022e23; // Avogadros Number
 
   // Input Parameters
-  double P = 1.4; //[Pa]
+  double P = 0.3; //[Pa]
   double T_gas = 300.0; // [K]
   double f_ground = 1.0;
   double f_excite = 5.0e-5;
@@ -121,7 +141,7 @@ int main(void) {
   // Time
   // Timesteps per LF * Cycles LF per HF * # HF
   int ts_hf = 200;
-  int n_cycle = 10;
+  int n_cycle = 1;
   int ts = ts_hf*100*n_cycle; // # of time steps
   double dt = 1.0/(f_hf*((double)ts_hf)); 
 
@@ -172,7 +192,11 @@ int main(void) {
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = 1e5; // initial # particles
+  int init_part = 1e5; // initial # particles per processor
+  if (((int)1e4)%((int)mpi_size)!= 0) {
+    cout << "Number of processors must divide initial particles evenly" << endl;
+  }
+
   double real_part = f_ion*P*L_inner/(k_B*T_gas);
 
   // Electron particle data
@@ -180,9 +204,9 @@ int main(void) {
   electron.initialize(max_part, n_cell);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = init_part;
+  electron.np = init_part/mpi_size;
   electron.T = 300.0; //[K]
-  electron.spwt = real_part/((double)electron.np);
+  electron.spwt = real_part/((double)electron.np*mpi_size);
   electron.gamma[0] = 0.0;
   electron.max_epsilon = 0.0;
 
@@ -191,9 +215,9 @@ int main(void) {
   ion.initialize(max_part, n_cell);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = init_part;
+  ion.np = init_part/mpi_size;
   ion.T = 300.0; //[K]
-  ion.spwt = real_part/((double)electron.np);
+  ion.spwt = real_part/((double)electron.np*mpi_size);
   ion.gamma[1] = 0.15;
   ion.max_epsilon = 0.0;
 
@@ -309,42 +333,43 @@ int main(void) {
   
   int write_iter = 200; // Write every x number of iterations
   int energy_output = 0;
-  string simNum ("013");
+  string simNum ("002");
   
-  ofstream InputFile("Results/InputData/Input"+simNum+".txt");
-  ofstream FieldCCFile("Results/FieldData/FieldCCData"+simNum+".txt");
-  ofstream FieldNCFile("Results/FieldData/FieldNCData"+simNum+".txt");
-  ofstream FieldAverageFile("Results/FieldData/FieldAverageData"+simNum+".txt");
-  ofstream NumFile("Results/NumberPartData/NumberPart"+simNum+".txt");
-  ofstream ElectronFile("Results/ParticleData/Electrons"+simNum+".txt");
-  ofstream IonFile("Results/ParticleData/Ions"+simNum+".txt");
-  ofstream TimerFile("Results/TimerData/Timer"+simNum+".txt");
+  ofstream InputFile("Results/Parallel/InputData/Input"+simNum+".txt");
+  ofstream FieldCCFile("Results/Parallel/FieldData/FieldCCData"+simNum+".txt");
+  ofstream FieldNCFile("Results/Parallel/FieldData/FieldNCData"+simNum+".txt");
+  ofstream FieldAverageFile("Results/Parallel/FieldData/FieldAverageData"+simNum+".txt");
+  ofstream NumFile("Results/Parallel/NumberPartData/NumberPart"+simNum+".txt");
+  ofstream ElectronFile("Results/Parallel/ParticleData/Electrons"+simNum+".txt");
+  ofstream IonFile("Results/Parallel/ParticleData/Ions"+simNum+".txt");
+  ofstream TimerFile("Results/Parallel/TimerData/Timer"+simNum+".txt");
 
-  InputFile << "Misc comments: Increased Pressure" << endl;
-  InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
-  InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes" << endl;
-  InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
-  InputFile << " " << ion.spwt << " " << V_hf << " " << V_lf << " " << f_hf;
-  InputFile << " " << f_lf << " " << ts << " " << dt << " " << nn << endl;
+  if(mpi_rank == 0) {
+    InputFile << "Misc comments: 10e4 particle, 5 processor" << endl;
+    InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
+    InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes / NumRanks" << endl;
+    InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
+    InputFile << " " << ion.spwt << " " << V_hf << " " << V_lf << " " << f_hf;
+    InputFile << " " << f_lf << " " << ts << " " << dt << " " << nn << " " << mpi_size << endl;
 
-  double neutral_bar, excited_bar, ion_bar, electron_bar;
-  FieldAverageFile << "Iteration / Neutral Density / Excited Density / ";
-  FieldAverageFile << "Ion Density / Electron Density" << endl;
+    FieldAverageFile << "Iteration / Neutral Density / Excited Density / ";
+    FieldAverageFile << "Ion Density / Electron Density" << endl;
 
-  FieldCCFile << "Iteration / Time / Cell x / Charge Density / ";
-  FieldCCFile << "Electric Potential / Neutral Density / Excited Density / ";
-  FieldCCFile << "Ion Density / Electron Density"<< endl;
+    FieldCCFile << "Iteration / Time / Cell x / Charge Density / ";
+    FieldCCFile << "Electric Potential / Neutral Density / Excited Density / ";
+    FieldCCFile << "Ion Density / Electron Density"<< endl;
 
-  FieldNCFile << "Iteration / Time / Node x / Electric Field" << endl;
+    FieldNCFile << "Iteration / Time / Node x / Electric Field" << endl;
  
-  if (energy_output == 1) {
-    ElectronFile << "Iteration / Epsilon " << endl;
-    IonFile << "Iteration / Epsilon " << endl;
+    if (energy_output == 1) {
+      ElectronFile << "Iteration / Epsilon " << endl;
+      IonFile << "Iteration / Epsilon " << endl;
+    }
+
+    NumFile << "Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np" << endl;
+
+    TimerFile << "Time in microseconds. Iter / Coll / Push1 / Fluid / Rho / Phi / E / Push2" << endl;
   }
-
-  NumFile << "Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np" << endl;
-
-  TimerFile << "Time in microseconds. Iter / Coll / Push1 / Fluid / Rho / Phi / E / Push2" << endl;
 
   //////////////////////////////////////////////////////////////////////////////
   //
@@ -364,7 +389,6 @@ int main(void) {
     null_count = 0;
     elastic_count = 0;
 
-
     for (int i = 0; i< n_cell; ++i) {
       phi[i] = 0.0;
       rho[i] = 0.0;
@@ -372,13 +396,14 @@ int main(void) {
       ion.n[i] = 0.0;
     }
     E_field[nn-1] = 0.0;
+
   /////////////////////////////////////////////////////////
   //
   // Compute charge density 
   //
   ////////////////////////////////////////////////////////
     
-  cout << "Computing initial charge density..." << endl;
+  if(mpi_rank == 0){cout << "Computing initial charge density..." << endl;}
 
   // Get number densities
   // Electrons
@@ -406,13 +431,17 @@ int main(void) {
     rho[i] = e*(ion.n[i]-electron.n[i]);
   }
 
+  // Collect total charge density between ranks
+
+  MPI_Allreduce(MPI_IN_PLACE, rho, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
   //////////////////////////////////////////////////
   //
   // Compute electric potential
   //
   /////////////////////////////////////////////////
 
-  cout << "Computing initial electric potential..." << endl;
+  if(mpi_rank==0){cout << "Computing initial electric potential..." << endl;}
 
   // Tridiagonal coefficients
   for (int i = 0; i < n_cell; ++i) {
@@ -434,9 +463,7 @@ int main(void) {
     }
   }
 
- 
   // Adjust RHS to account for BC
-  
   a[elec_range[1]] = 0.0;  
   b[elec_range[1]] -= 1.0; 
   RHS[elec_range[1]] -= 2.0*phi_left;
@@ -459,7 +486,7 @@ int main(void) {
   //
   //////////////////////////////////////////////////
     
-  cout << "Computing initial electric field..." << endl;
+  if(mpi_rank==0){cout << "Computing initial electric field..." << endl;}
 
   // Finite difference cell_interface
   for (int i = elec_range[1]; i <= elec_range[2]; ++i) {
@@ -496,32 +523,37 @@ int main(void) {
   //
   ////////////////////////////////////////////////////
 
-
-  neutral_bar = 0.0;
-  excited_bar = 0.0;
-  ion_bar = 0.0;
-  electron_bar = 0.0;
-
+  neutral.n_bar = 0.0;
+  excited.n_bar = 0.0;
+  ion.n_bar = 0.0;
+  electron.n_bar = 0.0;
+  MPI_Reduce(electron.n, electron.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(ion.n, ion.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  /*
   for (int i = 0; i < n_cell; ++i) {
     electron.epsilon_bulk[i] = 0.0;
     electron.vx_bulk[i] = 0.0;
     ion.epsilon_bulk[i] = 0.0;
     ion.vx_bulk[i] = 0.0;
-  }
+  }*/
 
   for (int i = 0; i < electron.np; ++i) {
     get_WeightsCC(electron.x[i], weights, &electron.cell_index[i],
 		     elec_range, dx);
 
+    /*
     electron.epsilon_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.epsilon[i];
     electron.epsilon_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.epsilon[i];
 
     electron.vx_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.vx[i];
     electron.vx_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.vx[i];
+    */
 
     if (electron.x[i] > (0.25*L_inner+x_bias) && electron.x[i] < (x_ground-0.25*L_inner)) {
       electron.inner_np += 1;
-      ElectronFile << 0 << " " <<  electron.epsilon[i] << endl;
+      if (energy_output == 1){
+        ElectronFile << 0 << " " <<  electron.epsilon[i] << endl;
+      }
     }
 
   }
@@ -530,21 +562,26 @@ int main(void) {
     get_WeightsCC(ion.x[i], weights, &ion.cell_index[i],
 		     elec_range, dx);
 
+    /*
     ion.epsilon_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.epsilon[i];
     ion.epsilon_bulk[ion.cell_index[i]+1] += ion.spwt*weights[1]*ion.epsilon[i];
 
     ion.vx_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.vx[i];
     ion.vx_bulk[ion.cell_index[i]+1] += ion.spwt*weights[1]*ion.vx[i];
+    */
 
     if (ion.x[i] > (0.25*L_inner+x_bias) && ion.x[i] < (x_ground-0.25*L_inner)) {
       ion.inner_np += 1;
-      IonFile << 0 << " " << ion.epsilon[i] << endl;
+      if(energy_output == 1){
+        IonFile << 0 << " " << ion.epsilon[i] << endl;
+      }
     }
   }
 
 
   // Energy density and flux density
   for (int i = 0; i < n_cell; ++i) {
+	  /*
     if(electron.n[i] > 0.0) {
       electron.vx_bulk[i] /= electron.n[i]*dx;
       electron.epsilon_bulk[i] /= electron.n[i]*dx;
@@ -552,33 +589,47 @@ int main(void) {
     if(ion.n[i] > 0.0) {
       ion.vx_bulk[i] /= ion.n[i]*dx;
       ion.epsilon_bulk[i] /= ion.n[i]*dx;
-    }
-    FieldCCFile << 0 << " " << t << " " << dx*(i+0.5) << " ";
-    FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
-    FieldCCFile << excited.n[i] << " " << ion.n[i] << " " << electron.n[i] << " ";
-    FieldCCFile << ion.epsilon_bulk[i] << " " << electron.epsilon_bulk[i] << " ";
-    FieldCCFile << ion.vx_bulk[i] << " " << electron.vx_bulk[i] << endl;
+    } */
+    if (mpi_rank == 0) {
+      neutral.n_bar += neutral.n[i];
+      excited.n_bar += excited.n[i];
+      ion.n_bar += ion.n_master[i];
+      electron.n_bar += electron.n_master[i];
 
-    neutral_bar += neutral.n[i];
-    excited_bar += excited.n[i];
-    ion_bar += ion.n[i];
-    electron_bar += electron.n[i];
+      FieldCCFile << 0 << " " << t << " " << dx*(i+0.5) << " ";
+      FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
+      FieldCCFile << excited.n[i] << " " << ion.n_master[i] << " ";
+      FieldCCFile << electron.n_master[i] << endl;
+      //FieldCCFile << ion.epsilon_bulk[i] << " " << electron.epsilon_bulk[i] << " ";
+      //FieldCCFile << ion.vx_bulk[i] << " " << electron.vx_bulk[i] << endl;
+    }
+
+
   }
-  for (int i = 0; i < nn; ++i) {
-    FieldNCFile << 0 << " " << t << " " << dx*i << " ";
-    FieldNCFile << E_field[i]  << endl;
+
+  if(mpi_rank == 0) {
+    for (int i = 0; i < nn; ++i) {
+      FieldNCFile << 0 << " " << t << " " << dx*i << " ";
+      FieldNCFile << E_field[i]  << endl;
+    }
   }
       
-  neutral_bar /= elec_range[2] - elec_range[1];
-  excited_bar /= elec_range[2] - elec_range[1];
-  ion_bar /= elec_range[2] - elec_range[1];
-  electron_bar /= elec_range[2] - elec_range[1];
+  neutral.n_bar /= elec_range[2] - elec_range[1];
+  excited.n_bar /= elec_range[2] - elec_range[1];
+  ion.n_bar /= elec_range[2] - elec_range[1];
+  electron.n_bar /= elec_range[2] - elec_range[1];
 
-  FieldAverageFile << 0  << " " << neutral_bar << " " << excited_bar;
-  FieldAverageFile << " " << ion_bar << " " << electron_bar << endl;
-  NumFile << 0 << " " << electron.np << " " << ion.np << " ";
-  NumFile << electron.inner_np << " " << ion.inner_np << endl;
- 
+  MPI_Reduce(&electron.np, &electron.np_total, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&ion.np, &ion.np_total, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&electron.inner_np, &electron.inner_np_total, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&ion.inner_np, &ion.inner_np_total, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  if(mpi_rank == 0){
+    FieldAverageFile << 0  << " " << neutral.n_bar << " " << excited.n_bar;
+    FieldAverageFile << " " << ion.n_bar << " " << electron.n_bar << endl;
+    NumFile << 0 << " " << electron.np_total << " " << ion.np_total << " ";
+    NumFile << electron.inner_np_total << " " << ion.inner_np_total << endl;
+  }
 /////////////////////////////////////////////////////////////////////////////////////////////////  
   //////////////////////////////////////////////////////////
   //
@@ -596,6 +647,8 @@ int main(void) {
     // Collision modules
     //
     //////////////////////////////////////////////////
+
+    if(mpi_rank==0){cout << "Iter: " << iter << endl;}
 
     start = steady_clock::now();
     
@@ -644,7 +697,7 @@ int main(void) {
       N_c_in = 0;
     } 
 
-    cout << "Calculating electron-neutral collisions..." << endl;
+    if(mpi_rank==0){cout << "Calculating electron-neutral collisions..." << endl;}
     //cout << N_c_en << " " << electron.max_epsilon << endl;
 
     for (int i = 0; i < N_c_en; ++i) {
@@ -803,7 +856,7 @@ int main(void) {
     }
     //cout << elastic_count << " " << null_count << endl;
 
-    cout << "Calculating electron-excited collisions..." << endl;
+    if(mpi_rank==0){cout << "Calculating electron-excited collisions..." << endl;}
 
     //cout << N_c_eex << endl;
 
@@ -891,7 +944,7 @@ int main(void) {
     }
 
     //cout << elastic_count << " " << null_count << endl;
-    cout << "Calculating ion-neutral collisions..." << endl;
+    if(mpi_rank==0){cout << "Calculating ion-neutral collisions..." << endl;}
     //cout << N_c_in << endl;
 
     elastic_count = 0;
@@ -992,9 +1045,6 @@ int main(void) {
     null_count = 0;
     elastic_count = 0;
 
-    cout << "Iter: " << iter << endl;
-
-
     //////////////////////////////////////////////////
     //
     // Move particles
@@ -1005,7 +1055,7 @@ int main(void) {
     //
     //////////////////////////////////////////////////
 
-    cout << "Moving Particles..." << endl;
+    if(mpi_rank==0){cout << "Moving Particles..." << endl;}
     start = steady_clock::now();
 
     electron.flux_L = 0.0;
@@ -1025,7 +1075,7 @@ int main(void) {
       // if not, absorb particle
       if (electron.x[p] < x_bias ||
 	  electron.x[p] > x_ground) {
-	
+	/*
 	// Elastic
 	
 	R = ((double)rand())/((double) RAND_MAX);
@@ -1046,14 +1096,14 @@ int main(void) {
 	    electron.x[p] = x_ground + electron.vx[p]*time_coll;
 	  }
 	}
-       
+       */
 	// Absorption
-	else {
+	//else {
 	  if (electron.x[p] < x_bias) {electron.flux_L -= electron.spwt/dt;}
 	  else {electron.flux_R += electron.spwt/dt;}
 	  electron.remove_part(p);
  	  --p;
-	} 
+	//} 
       }
     }
 
@@ -1130,11 +1180,13 @@ int main(void) {
     //
     ////////////////////////////////////////////////////////
     
-    cout << "Computing fluid density" << endl;
+    if(mpi_rank==0){cout << "Computing fluid density" << endl;}
     start = steady_clock::now();
 
     double n_tot;
- 
+
+    // Get densities for fluids
+    // Ion.n[i] should be reduced already at this point
     for (int i = 0; i < n_cell; ++i) {
       if (i >= elec_range[1] && i < elec_range[2]) {
 	n_tot =  neutral.n[i] + excited.n[i] + ion.n[i];
@@ -1164,9 +1216,18 @@ int main(void) {
 			      dx, dt, elec_range[2]-elec_range[1],
 			      &excited.flux_L, &excited.flux_R);
 
-    
     neutral.n[elec_range[1]] += -dt/dx*excited.flux_L;
     neutral.n[elec_range[2]-1] += dt/dx*excited.flux_R;
+
+    // Technically need this to be correct, but since neutral density is nearly uniform
+    // get rid of this to be faster
+    /*
+    // Gather the fluxes from all the ranks
+    MPI_Allreduce(MPI_IN_PLACE, &electron.flux_L, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &electron.flux_R, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &ion.flux_L, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &ion.flux_R, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    */
 
     neutral.n[elec_range[1]] += -dt/dx*ion.flux_L;
     neutral.n[elec_range[2]-1] += dt/dx*ion.flux_R;
@@ -1192,7 +1253,7 @@ int main(void) {
     //
     ////////////////////////////////////////////////////////
     
-    cout << "Computing charge density..." << endl;
+    if(mpi_rank==0){cout << "Computing charge density..." << endl;}
 
     start = steady_clock::now();
 
@@ -1228,6 +1289,9 @@ int main(void) {
       // Charge density
       rho[i] = e*(ion.n[i]-electron.n[i]);
     }
+
+    MPI_Allreduce(MPI_IN_PLACE, rho, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
     stop = steady_clock::now();
     duration = duration_cast<microseconds>(stop-start);
     auto time_rho = duration.count();
@@ -1238,7 +1302,7 @@ int main(void) {
     //
     /////////////////////////////////////////////////
 
-    cout << "Computing electric potential..." << endl;
+    if(mpi_rank==0){cout << "Computing electric potential..." << endl;}
 
     start = steady_clock::now();
 
@@ -1290,7 +1354,7 @@ int main(void) {
     //
     //////////////////////////////////////////////////
     
-    cout << "Computing electric field..." << endl;
+    if(mpi_rank==0){cout << "Computing electric field..." << endl;}
 
     start = steady_clock::now();
 
@@ -1323,7 +1387,7 @@ int main(void) {
     //
     //////////////////////////////////////////////////
 
-    cout << "Moving Particles..." << endl;
+    if(mpi_rank == 0){cout << "Moving Particles..." << endl;}
 
     start = steady_clock::now();
 
@@ -1370,6 +1434,7 @@ int main(void) {
     duration = duration_cast<microseconds>(stop-start);
     auto time_push2 = duration.count();
 
+    /*
     // Check mass conservation
     double dn_tot = 0.0;
     for(int k = elec_range[1]; k < elec_range[2]; ++k) {
@@ -1382,29 +1447,39 @@ int main(void) {
     for(int k = elec_range[1]; k < elec_range[2]; ++k) {
       dn_tote += (ion.n[k]+dt/dx*(ion.flux_R-ion.flux_L)) -
 	         (electron.n[k] + dt/dx*(electron.flux_R-electron.flux_L));
-    }
-
-    //if(iter%10 == 0) {
-      cout << "End of iteration" << endl;
-      cout << "electron.np = " << electron.np << endl;
-      cout << "ion.np = " << ion.np << endl;
-      cout << "Mass conservation check: vol average density " << dn_tot << endl;
-      cout << "Charge conservation check: total charge - lost to wall " << dn_tote << endl;
-    //}
-   
+    }*/
+  
+    // Get totals for output
 
     ////////////////////////////////////////////////////
     //
     // Output info
     //
     ////////////////////////////////////////////////////
+    // Display end of iteration
+    if(mpi_rank == 0) {
+      cout << "End of iteration" << endl;
+      //cout << "Mass conservation check: vol average density " << dn_tot << endl;
+      //cout << "Charge conservation check: total charge - lost to wall " << dn_tote << endl;
+    }
 
     if ((iter)%write_iter == 0) {
-      neutral_bar = 0.0;
-      excited_bar = 0.0;
-      ion_bar = 0.0;
+      MPI_Reduce(&electron.np, &electron.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(&ion.np, &ion.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(electron.n, electron.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(electron.n, ion.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+      
+      if(mpi_rank == 0) {
+      cout << "electron.np = " << electron.np_total << endl;
+      cout << "ion.np = " << ion.np_total << endl;
+      }
+
+      neutral.n_bar = 0.0;
+      excited.n_bar = 0.0;
+      ion.n_bar = 0.0;
+      electron.n_bar = 0.0;
+
       ion.inner_np = 0;
-      electron_bar = 0.0;
       electron.inner_np = 0;
       
       for (int i = 0; i < n_cell; ++i) {
@@ -1415,14 +1490,14 @@ int main(void) {
       }
 
       for (int i = 0; i < electron.np; ++i) {
-        get_WeightsCC(electron.x[i], weights, &electron.cell_index[i],
-		     elec_range, dx);
+        //get_WeightsCC(electron.x[i], weights, &electron.cell_index[i],
+	//	     elec_range, dx);
 
-        electron.epsilon_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.epsilon[i];
-        electron.epsilon_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.epsilon[i];
+        //electron.epsilon_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.epsilon[i];
+        //electron.epsilon_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.epsilon[i];
 
-        electron.vx_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.vx[i];
-        electron.vx_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.vx[i];
+        //electron.vx_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.vx[i];
+        //electron.vx_bulk[electron.cell_index[i]+1] += electron.spwt*weights[1]*electron.vx[i];
 
 	
 	if (electron.x[i] > (0.25*L_inner+x_bias) && electron.x[i] < (x_ground-0.25*L_inner)) {
@@ -1431,17 +1506,16 @@ int main(void) {
 	    ElectronFile << iter << " " <<  electron.epsilon[i] << endl;
 	  }
 	}
-
       }
       for (int i = 0; i < ion.np; ++i) {
-        get_WeightsCC(ion.x[i], weights, &ion.cell_index[i],
-		     elec_range, dx);
+        //get_WeightsCC(ion.x[i], weights, &ion.cell_index[i],
+	//	     elec_range, dx);
 
-        ion.epsilon_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.epsilon[i];
-        ion.epsilon_bulk[ion.cell_index[i]+1] += ion.spwt*weights[1]*ion.epsilon[i];
+        //ion.epsilon_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.epsilon[i];
+        //ion.epsilon_bulk[ion.cell_index[i]+1] += ion.spwt*weights[1]*ion.epsilon[i];
 
-        ion.vx_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.vx[i];
-        ion.vx_bulk[ion.cell_index[i]+1] += ion.spwt*weights[1]*ion.vx[i];
+        //ion.vx_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.vx[i];
+        //ion.vx_bulk[ion.cell_index[i]+1] += ion.spwt*weights[1]*ion.vx[i];
 
 	if (ion.x[i] > (0.25*L_inner+x_bias) && ion.x[i] < (x_ground-0.25*L_inner)) {
 	  ion.inner_np += 1;
@@ -1453,44 +1527,54 @@ int main(void) {
       }
 
       for (int i = 0; i < n_cell; ++i) {
-       if(electron.n[i] > 0.0) {
-        electron.vx_bulk[i] /= electron.n[i]*dx;
-        electron.epsilon_bulk[i] /= electron.n[i]*dx;
-      }
-      if(ion.n[i] > 0.0) {
+       /*if(electron.n[i] > 0.0) {
+         electron.vx_bulk[i] /= electron.n[i]*dx;
+         electron.epsilon_bulk[i] /= electron.n[i]*dx;
+       }
+       if(ion.n[i] > 0.0) {
         ion.vx_bulk[i] /= ion.n[i]*dx;
         ion.epsilon_bulk[i] /= ion.n[i]*dx;
-      }
+        }*/
 
-        FieldCCFile << iter << " " << t << " " << dx*(i+0.5) << " ";
-        FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
-        FieldCCFile << excited.n[i] << " " << ion.n[i] << " " << electron.n[i] << " ";
-        FieldCCFile << ion.epsilon_bulk[i] << " " << electron.epsilon_bulk[i] << " ";
-        FieldCCFile << ion.vx_bulk[i] << " " << electron.vx_bulk[i] << endl;
+	if (mpi_rank == 0) {
+	  neutral.n_bar += neutral.n[i];
+	  excited.n_bar += excited.n[i];
+	  ion.n_bar += ion.n_master[i];
+	  electron.n_bar += electron.n_master[i];
 
-	neutral_bar += neutral.n[i];
-	excited_bar += excited.n[i];
-	ion_bar += ion.n[i];
-	electron_bar += electron.n[i];
+          FieldCCFile << iter << " " << t << " " << dx*(i+0.5) << " ";
+          FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
+          FieldCCFile << excited.n[i] << " " << ion.n_master[i] << " ";
+	  FieldCCFile << electron.n_master[i] << endl;
+          //FieldCCFile << ion.epsilon_bulk[i] << " " << electron.epsilon_bulk[i] << " ";
+          //FieldCCFile << ion.vx_bulk[i] << " " << electron.vx_bulk[i] << endl;
+	}
+
       }
-      for (int i = 0; i < nn; ++i) {
-	FieldNCFile << iter << " " << t << " " << dx*i << " ";
-	FieldNCFile << E_field[i]  << endl;
+      if (mpi_rank == 0) {
+        for (int i = 0; i < nn; ++i) {
+	  FieldNCFile << iter << " " << t << " " << dx*i << " ";
+	  FieldNCFile << E_field[i]  << endl;
+        }
       }
       
-      neutral_bar /= elec_range[2] - elec_range[1];
-      excited_bar /= elec_range[2] - elec_range[1];
-      ion_bar /= elec_range[2] - elec_range[1];
-      electron_bar /= elec_range[2] - elec_range[1];
+      neutral.n_bar /= elec_range[2] - elec_range[1];
+      excited.n_bar /= elec_range[2] - elec_range[1];
+      ion.n_bar /= elec_range[2] - elec_range[1];
+      electron.n_bar /= elec_range[2] - elec_range[1];
+      MPI_Reduce(&electron.inner_np, &electron.inner_np_total, 1, 
+		      MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(&ion.inner_np, &ion.inner_np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-      FieldAverageFile << iter << " " << neutral_bar << " " << excited_bar;
-      FieldAverageFile << " " << ion_bar << " " << electron_bar << " " << endl;
-      NumFile << iter << " " << electron.np << " " << ion.np << " ";
-      NumFile << electron.inner_np << " " << ion.inner_np << endl;
-      TimerFile << iter << " " << time_coll << " " << time_push1 << " ";
-      TimerFile << time_fluid << " " << time_rho << " " << time_phi << " ";
-      TimerFile << time_E << " " << time_push2 << endl;
-      
+      if (mpi_rank == 0) {
+        FieldAverageFile << iter << " " << neutral.n_bar << " " << excited.n_bar;
+        FieldAverageFile << " " << ion.n_bar << " " << electron.n_bar << " " << endl;
+        NumFile << iter << " " << electron.np_total << " " << ion.np_total << " ";
+        NumFile << electron.inner_np_total << " " << ion.inner_np_total << endl;
+        TimerFile << iter << " " << time_coll << " " << time_push1 << " ";
+        TimerFile << time_fluid << " " << time_rho << " " << time_phi << " ";
+        TimerFile << time_E << " " << time_push2 << endl;
+      }
     }
   }
 
@@ -1506,7 +1590,6 @@ int main(void) {
   delete(E_field);
   delete(phi);
 
-  
   electron.clean();
   ion.clean();
   neutral.clean();
@@ -1514,7 +1597,9 @@ int main(void) {
 
   auto stop_total = steady_clock::now();
   auto duration_total = duration_cast<minutes>(stop_total-start_total);
-  cout << "Total minutes: " << duration_total.count() << endl;
+  if(mpi_rank == 0) {cout << "Total minutes: " << duration_total.count() << endl;}
+  MPI_Finalize();
 
+  
   return 0;
 }

@@ -1,0 +1,2 @@
+Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np
+0 10000 10000 4992 5076

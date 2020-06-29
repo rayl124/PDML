@@ -21,7 +21,8 @@ class particles {
     int *cell_index;
 
     // Field arrays
-    double *n;   // Number density in m^-3
+    double *n;   // Number density in m^-3, local
+    double *n_master; // Global number density
     double *epsilon_bulk;
     double *vx_bulk;
 
@@ -30,10 +31,15 @@ class particles {
     double q;  // Charge in C
     double flux_L = 0.0;
     double flux_R = 0.0;
+    double n_bar = 0.0; // Average density
 
     double max_epsilon = 0.0;  // Max energy
     int np = 0;  // Number of current particles
     int inner_np = 0; // Particles in the middle 50% of the domain
+
+    // Global total of particles
+    int np_total;
+    int inner_np_total;
 
 
     void initialize(int max_part, int n_cell);
@@ -60,6 +66,7 @@ void particles::initialize(int max_part, int n_cell) {
 
 
   n = new double[n_cell];
+  n_master = new double[n_cell];
   epsilon_bulk = new double[n_cell];
   vx_bulk = new double[n_cell];
   gamma = new double[2]; 
@@ -75,6 +82,7 @@ void particles::clean(void) {
   delete(node_index);
   delete(cell_index);
   delete(n);
+  delete(n_master);
   delete(epsilon_bulk);
   delete(vx_bulk);
   delete(gamma);
@@ -118,6 +126,7 @@ class fluid {
     double m;
     double flux_L;
     double flux_R;
+    double n_bar = 0.0;
 
     void initialize(int n_cell);
     void clean(void);

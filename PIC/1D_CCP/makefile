@@ -1,4 +1,5 @@
 CC = g++
+MPI_CC = mpiCC
 
 ifstream_test: ifstream_test.cc
 	$(CC) -g -o ifstream_test ifstream_test.cc
@@ -22,7 +23,7 @@ getDTest: getDTest.cc
 	$(CC) -g -o getDTest getDTest.cc -lm
 
 1D_CCP: 1D_CCP.cc
-	$(CC) -g -o 1D_CCP 1D_CCP.cc -lm
+	$(MPI_CC) -g -o 1D_CCP 1D_CCP.cc -lm
 
 uploadGIT: 
 	cd ..; \
