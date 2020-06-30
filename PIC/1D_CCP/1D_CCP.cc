@@ -83,6 +83,7 @@ void lagrangePoly(double x_target, double *x,
 
 int main(int argc, char **argv) 
 {  
+  
   MPI_Init(&argc, &argv);
   int mpi_rank, mpi_size;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
@@ -192,7 +193,7 @@ int main(int argc, char **argv)
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = 1e5; // initial # particles per processor
+  int init_part = 1e4; // initial # particles per processor
   if (((int)1e4)%((int)mpi_size)!= 0) {
     cout << "Number of processors must divide initial particles evenly" << endl;
   }
@@ -334,7 +335,7 @@ int main(int argc, char **argv)
   int write_iter = 200; // Write every x number of iterations
   int energy_output = 0;
   string simNum ("002");
-  
+
   ofstream InputFile("Results/Parallel/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/Parallel/FieldData/FieldCCData"+simNum+".txt");
   ofstream FieldNCFile("Results/Parallel/FieldData/FieldNCData"+simNum+".txt");
@@ -344,7 +345,7 @@ int main(int argc, char **argv)
   ofstream IonFile("Results/Parallel/ParticleData/Ions"+simNum+".txt");
   ofstream TimerFile("Results/Parallel/TimerData/Timer"+simNum+".txt");
 
-  if(mpi_rank == 0) {
+  //if(mpi_rank == 0) {
     InputFile << "Misc comments: 10e4 particle, 5 processor" << endl;
     InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
     InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes / NumRanks" << endl;
@@ -368,8 +369,9 @@ int main(int argc, char **argv)
 
     NumFile << "Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np" << endl;
 
-    TimerFile << "Time in microseconds. Iter / Coll / Push1 / Fluid / Rho / Phi / E / Push2" << endl;
-  }
+    TimerFile << "Time in microseconds. Iter / Coll / Push1 / Fluid / Rho / Phi / E / Push2";
+    TimerFile << " / Total min elapsed "<< endl;
+  //}
 
   //////////////////////////////////////////////////////////////////////////////
   //
@@ -1457,6 +1459,8 @@ int main(int argc, char **argv)
     //
     ////////////////////////////////////////////////////
     // Display end of iteration
+    auto stop_total = steady_clock::now();
+    auto duration_total = duration_cast<minutes>(stop_total-start_total);
     if(mpi_rank == 0) {
       cout << "End of iteration" << endl;
       //cout << "Mass conservation check: vol average density " << dn_tot << endl;
@@ -1566,6 +1570,8 @@ int main(int argc, char **argv)
 		      MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
       MPI_Reduce(&ion.inner_np, &ion.inner_np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
+
+
       if (mpi_rank == 0) {
         FieldAverageFile << iter << " " << neutral.n_bar << " " << excited.n_bar;
         FieldAverageFile << " " << ion.n_bar << " " << electron.n_bar << " " << endl;
@@ -1573,7 +1579,9 @@ int main(int argc, char **argv)
         NumFile << electron.inner_np_total << " " << ion.inner_np_total << endl;
         TimerFile << iter << " " << time_coll << " " << time_push1 << " ";
         TimerFile << time_fluid << " " << time_rho << " " << time_phi << " ";
-        TimerFile << time_E << " " << time_push2 << endl;
+        TimerFile << time_E << " " << time_push2 << " " << duration_total.count() << endl;
+        cout << "Total minutes: " << duration_total.count() << endl;
+
       }
     }
   }
@@ -1594,10 +1602,7 @@ int main(int argc, char **argv)
   ion.clean();
   neutral.clean();
   excited.clean();
-
-  auto stop_total = steady_clock::now();
-  auto duration_total = duration_cast<minutes>(stop_total-start_total);
-  if(mpi_rank == 0) {cout << "Total minutes: " << duration_total.count() << endl;}
+  
   MPI_Finalize();
 
   
