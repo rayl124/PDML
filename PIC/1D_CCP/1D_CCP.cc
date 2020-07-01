@@ -193,21 +193,21 @@ int main(int argc, char **argv)
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = 1e6; // initial # particles per processor
+  int init_part = 1e6/mpi_size; // initial # particles per processor
   if (((int)1e4)%((int)mpi_size)!= 0) {
     cout << "Number of processors must divide initial particles evenly" << endl;
   }
 
-  double real_part = f_ion*P*L_inner/(k_B*T_gas);
+  double real_part = f_ion*P*L_inner/(k_B*T_gas*mpi_size);
 
   // Electron particle data
   particles electron;
   electron.initialize(max_part, n_cell);
   electron.m = 9.109e-31; //[kg]
   electron.q = -1.0*e; //[C]
-  electron.np = init_part/mpi_size;
+  electron.np = init_part;
   electron.T = 300.0; //[K]
-  electron.spwt = real_part/((double)electron.np*mpi_size);
+  electron.spwt = real_part/((double)electron.np);
   electron.gamma[0] = 0.0;
   electron.max_epsilon = 0.0;
 
@@ -216,9 +216,9 @@ int main(int argc, char **argv)
   ion.initialize(max_part, n_cell);
   ion.m = 39.948*AMU; //[kg]
   ion.q = e; //[c]
-  ion.np = init_part/mpi_size;
+  ion.np = init_part;
   ion.T = 300.0; //[K]
-  ion.spwt = real_part/((double)electron.np*mpi_size);
+  ion.spwt = real_part/((double)ion.np);
   ion.gamma[1] = 0.15;
   ion.max_epsilon = 0.0;
 
