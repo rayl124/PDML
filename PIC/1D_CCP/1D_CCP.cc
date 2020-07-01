@@ -193,7 +193,7 @@ int main(int argc, char **argv)
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = 1e4; // initial # particles per processor
+  int init_part = 1e6; // initial # particles per processor
   if (((int)1e4)%((int)mpi_size)!= 0) {
     cout << "Number of processors must divide initial particles evenly" << endl;
   }
@@ -334,7 +334,7 @@ int main(int argc, char **argv)
   
   int write_iter = 200; // Write every x number of iterations
   int energy_output = 0;
-  string simNum ("002");
+  string simNum ("007");
 
   ofstream InputFile("Results/Parallel/InputData/Input"+simNum+".txt");
   ofstream FieldCCFile("Results/Parallel/FieldData/FieldCCData"+simNum+".txt");
@@ -346,7 +346,7 @@ int main(int argc, char **argv)
   ofstream TimerFile("Results/Parallel/TimerData/Timer"+simNum+".txt");
 
   //if(mpi_rank == 0) {
-    InputFile << "Misc comments: 10e4 particle, 5 processor" << endl;
+    InputFile << "Misc comments: 10e6 particle, 5 processor" << endl;
     InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
     InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes / NumRanks" << endl;
     InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -1229,6 +1229,8 @@ int main(int argc, char **argv)
     MPI_Allreduce(MPI_IN_PLACE, &electron.flux_R, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &ion.flux_L, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &ion.flux_R, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    Currently, code also doesn't create enough excitations because of no communication in this part
     */
 
     neutral.n[elec_range[1]] += -dt/dx*ion.flux_L;

@@ -23,7 +23,7 @@ getDTest: getDTest.cc
 	$(CC) -g -o getDTest getDTest.cc -lm
 
 1D_CCP: 1D_CCP.cc
-	$(MPI_CC) -g -o 1D_CCP 1D_CCP.cc -lm
+	$(MPI_CC) -g -o 1D_CCP.out 1D_CCP.cc -lm
 
 uploadGIT: 
 	cd ..; \
