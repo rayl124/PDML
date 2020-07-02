@@ -1,0 +1,3 @@
+Misc comments: Check to make sure no bugs
+Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes / NumRanks
+0.3 5000 5000 4.0729e+09 4.0729e+09 110 281.9 2.712e+07 271200 20000 1.84366e-10 191 2

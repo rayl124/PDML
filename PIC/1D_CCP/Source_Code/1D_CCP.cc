@@ -193,7 +193,7 @@ int main(int argc, char **argv)
   //
   // //////////////////////////////////////////////////////////
   int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = 1e6/mpi_size; // initial # particles per processor
+  int init_part = 1e4/mpi_size; // initial # particles per processor
   if (((int)1e4)%((int)mpi_size)!= 0) {
     cout << "Number of processors must divide initial particles evenly" << endl;
   }
@@ -334,19 +334,19 @@ int main(int argc, char **argv)
   
   int write_iter = 200; // Write every x number of iterations
   int energy_output = 0;
-  string simNum ("007");
+  string simNum ("008");
 
-  ofstream InputFile("Results/Parallel/InputData/Input"+simNum+".txt");
-  ofstream FieldCCFile("Results/Parallel/FieldData/FieldCCData"+simNum+".txt");
-  ofstream FieldNCFile("Results/Parallel/FieldData/FieldNCData"+simNum+".txt");
-  ofstream FieldAverageFile("Results/Parallel/FieldData/FieldAverageData"+simNum+".txt");
-  ofstream NumFile("Results/Parallel/NumberPartData/NumberPart"+simNum+".txt");
-  ofstream ElectronFile("Results/Parallel/ParticleData/Electrons"+simNum+".txt");
-  ofstream IonFile("Results/Parallel/ParticleData/Ions"+simNum+".txt");
-  ofstream TimerFile("Results/Parallel/TimerData/Timer"+simNum+".txt");
+  ofstream InputFile("../Results/Parallel/InputData/Input"+simNum+".txt");
+  ofstream FieldCCFile("../Results/Parallel/FieldData/FieldCCData"+simNum+".txt");
+  ofstream FieldNCFile("../Results/Parallel/FieldData/FieldNCData"+simNum+".txt");
+  ofstream FieldAverageFile("../Results/Parallel/FieldData/FieldAverageData"+simNum+".txt");
+  ofstream NumFile("../Results/Parallel/NumberPartData/NumberPart"+simNum+".txt");
+  ofstream ElectronFile("../Results/Parallel/ParticleData/Electrons"+simNum+".txt");
+  ofstream IonFile("../Results/Parallel/ParticleData/Ions"+simNum+".txt");
+  ofstream TimerFile("../Results/Parallel/TimerData/Timer"+simNum+".txt");
 
   //if(mpi_rank == 0) {
-    InputFile << "Misc comments: 10e6 particle, 5 processor" << endl;
+    InputFile << "Misc comments: Check to make sure no bugs" << endl;
     InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
     InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes / NumRanks" << endl;
     InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -434,7 +434,8 @@ int main(int argc, char **argv)
   }
 
   // Collect total charge density between ranks
-
+  MPI_Allreduce(MPI_IN_PLACE, electron.n, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, ion.n, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); 
   MPI_Allreduce(MPI_IN_PLACE, rho, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
   //////////////////////////////////////////////////
@@ -529,8 +530,9 @@ int main(int argc, char **argv)
   excited.n_bar = 0.0;
   ion.n_bar = 0.0;
   electron.n_bar = 0.0;
-  MPI_Reduce(electron.n, electron.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(ion.n, ion.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  //MPI_Reduce(electron.n, electron.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  //MPI_Reduce(ion.n, ion.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  
   /*
   for (int i = 0; i < n_cell; ++i) {
     electron.epsilon_bulk[i] = 0.0;
@@ -595,13 +597,13 @@ int main(int argc, char **argv)
     if (mpi_rank == 0) {
       neutral.n_bar += neutral.n[i];
       excited.n_bar += excited.n[i];
-      ion.n_bar += ion.n_master[i];
-      electron.n_bar += electron.n_master[i];
+      ion.n_bar += ion.n[i];
+      electron.n_bar += electron.n[i];
 
       FieldCCFile << 0 << " " << t << " " << dx*(i+0.5) << " ";
       FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
-      FieldCCFile << excited.n[i] << " " << ion.n_master[i] << " ";
-      FieldCCFile << electron.n_master[i] << endl;
+      FieldCCFile << excited.n[i] << " " << ion.n[i] << " ";
+      FieldCCFile << electron.n[i] << endl;
       //FieldCCFile << ion.epsilon_bulk[i] << " " << electron.epsilon_bulk[i] << " ";
       //FieldCCFile << ion.vx_bulk[i] << " " << electron.vx_bulk[i] << endl;
     }
@@ -1188,7 +1190,8 @@ int main(int argc, char **argv)
     double n_tot;
 
     // Get densities for fluids
-    // Ion.n[i] should be reduced already at this point
+    // ion.n[i] should already be reduced
+        
     for (int i = 0; i < n_cell; ++i) {
       if (i >= elec_range[1] && i < elec_range[2]) {
 	n_tot =  neutral.n[i] + excited.n[i] + ion.n[i];
@@ -1221,17 +1224,11 @@ int main(int argc, char **argv)
     neutral.n[elec_range[1]] += -dt/dx*excited.flux_L;
     neutral.n[elec_range[2]-1] += dt/dx*excited.flux_R;
 
-    // Technically need this to be correct, but since neutral density is nearly uniform
-    // get rid of this to be faster
-    /*
     // Gather the fluxes from all the ranks
     MPI_Allreduce(MPI_IN_PLACE, &electron.flux_L, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &electron.flux_R, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &ion.flux_L, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &ion.flux_R, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    Currently, code also doesn't create enough excitations because of no communication in this part
-    */
 
     neutral.n[elec_range[1]] += -dt/dx*ion.flux_L;
     neutral.n[elec_range[2]-1] += dt/dx*ion.flux_R;
@@ -1294,6 +1291,8 @@ int main(int argc, char **argv)
       rho[i] = e*(ion.n[i]-electron.n[i]);
     }
 
+    MPI_Allreduce(MPI_IN_PLACE, electron.n, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, ion.n, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, rho, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     stop = steady_clock::now();
@@ -1472,8 +1471,8 @@ int main(int argc, char **argv)
     if ((iter)%write_iter == 0) {
       MPI_Reduce(&electron.np, &electron.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
       MPI_Reduce(&ion.np, &ion.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-      MPI_Reduce(electron.n, electron.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-      MPI_Reduce(electron.n, ion.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+      //MPI_Reduce(electron.n, electron.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+      //MPI_Reduce(electron.n, ion.n_master, n_cell, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
       
       if(mpi_rank == 0) {
       cout << "electron.np = " << electron.np_total << endl;
@@ -1545,13 +1544,13 @@ int main(int argc, char **argv)
 	if (mpi_rank == 0) {
 	  neutral.n_bar += neutral.n[i];
 	  excited.n_bar += excited.n[i];
-	  ion.n_bar += ion.n_master[i];
-	  electron.n_bar += electron.n_master[i];
+	  ion.n_bar += ion.n[i];
+	  electron.n_bar += electron.n[i];
 
           FieldCCFile << iter << " " << t << " " << dx*(i+0.5) << " ";
           FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
-          FieldCCFile << excited.n[i] << " " << ion.n_master[i] << " ";
-	  FieldCCFile << electron.n_master[i] << endl;
+          FieldCCFile << excited.n[i] << " " << ion.n[i] << " ";
+	  FieldCCFile << electron.n[i] << endl;
           //FieldCCFile << ion.epsilon_bulk[i] << " " << electron.epsilon_bulk[i] << " ";
           //FieldCCFile << ion.vx_bulk[i] << " " << electron.vx_bulk[i] << endl;
 	}

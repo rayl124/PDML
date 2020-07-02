@@ -27,6 +27,9 @@ getDTest: getDTest.cc
 
 uploadGIT: 
 	cd ..; \
-	git add -A 1D_CCP/
-	git commit -m "New simulation"
+	git add -A Source_Code/
+	git commit -m "Updated Source Code"
 	git push origin master
+
+clean:
+	rm ifstream_test 1D_Poisson_test interpolate_test collision_test driftDiffusionTest simpsonsTest getDTest 1D_CCP
