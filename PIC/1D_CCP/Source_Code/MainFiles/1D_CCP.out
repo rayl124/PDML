@@ -1,0 +1,16 @@
+Fatal error in MPI_Init: Other MPI error, error stack:
+MPIR_Init_thread(805).....: fail failed
+MPID_Init(1859)...........: channel initialization failed
+MPIDI_CH3_Init(126).......: fail failed
+MPID_nem_init_ckpt(858)...: fail failed
+MPIDI_CH3I_Seg_commit(427): PMI_KVS_Get returned -1
+[unset]: readline failed
+srun: error: compute-3-9: task 1: Exited with exit code 15
+srun: interrupt (one more within 1 sec to abort)
+srun: step:6415.0 task 0: running
+srun: step:6415.0 task 1: exited abnormally
+srun: interrupt (one more within 1 sec to abort)
+srun: step:6415.0 task 0: running
+srun: step:6415.0 task 1: exited abnormally
+srun: sending Ctrl-C to job 6415.0
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.

@@ -1,5 +1,5 @@
 CC = g++
-MPI_CC = mpiCC
+MPI_CC = mpicxx
 
 ifstream_test: ifstream_test.cc
 	$(CC) -g -o ifstream_test ifstream_test.cc
@@ -23,13 +23,10 @@ getDTest: getDTest.cc
 	$(CC) -g -o getDTest getDTest.cc -lm
 
 1D_CCP: 1D_CCP.cc
-	$(MPI_CC) -g -o 1D_CCP.out 1D_CCP.cc -lm
+	$(MPI_CC) -Ofast -o 1D_CCP 1D_CCP.cc -lm
 
 uploadGIT: 
 	cd ..; \
-	git add -A Source_Code/
-	git commit -m "Updated Source Code"
+	git add -A 1D_CCP/
+	git commit -m "New simulation"
 	git push origin master
-
-clean:
-	rm ifstream_test 1D_Poisson_test interpolate_test collision_test driftDiffusionTest simpsonsTest getDTest 1D_CCP
