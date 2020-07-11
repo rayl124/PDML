@@ -6,6 +6,7 @@
 #include <chrono>
 #include "mpi.h"
 #include <stdio.h>
+#include <string>
 
 #include "species.h"
 #include "solverModules.h"
@@ -23,7 +24,7 @@ using namespace std::chrono;
 //  To run in comet: 
 //  module purge
 //  module load gnu openmpi_ib
-//  ./1D_CCP (Pressure)
+//  ibrun -n (# cores) ./1D_CCP (# initial particles) (Pressure)
 //
 //  For parallel, have to run a batch script
 //  Made by: Raymond Lau for PDML
@@ -105,7 +106,7 @@ int main(int argc, char **argv)
 
   // Input Parameters
   //double P = 0.3; //[Pa]
-  double P = atof(argv[1]);
+  double P = atof(argv[2]);
   double T_gas = 300.0; // [K]
   double f_ground = 1.0;
   double f_excite = 5.0e-5;
@@ -147,9 +148,10 @@ int main(int argc, char **argv)
   // Time
   // Timesteps per HF * Cycles HF per LF * # LF
   int ts_hf = 200;
-  int n_cycle = 1;
+  int n_cycle = 120;
   int ts = ts_hf*100*n_cycle; // # of time steps
   //int ts = 200*1;
+  //int ts = 2653600;
   double dt = 1.0/(f_hf*((double)ts_hf)); 
 
   //////////////////////////////////////////////////////////////
@@ -196,8 +198,9 @@ int main(int argc, char **argv)
   // Particle variables
   //
   // //////////////////////////////////////////////////////////
-  int max_part = 4e6; // max_particles if none leave during time history
-  int init_part = round(1e6/mpi_size); // initial # particles per processor
+  int max_part = 6e6; // max_particles if none leave during time history
+  int total_init_part = atoi(argv[1]);
+  int init_part = round(total_init_part/mpi_size); // initial # particles per processor
   //if (((int)1e4)%((int)mpi_size)!= 0) {
   //  cout << "Number of processors must divide initial particles evenly" << endl;
   //}
@@ -340,6 +343,8 @@ int main(int argc, char **argv)
   int write_restart = ts/5; 	// Write restart file every 20% of the simulation
 			    	// Make it so this is a multiple of write_iter 
   int restart_opt = 1; 	// 0 to not write restart, 1 to write restart file
+  //int write_rank = atoi(argv[3]); // What rank will be the master rank to write the files  
+
 
   /* Old storage convention  
   //string simNum ("024");
@@ -359,11 +364,14 @@ int main(int argc, char **argv)
   ofstream FieldNCFile("../FieldNCData.txt");
   ofstream FieldAverageFile("../FieldAverageData.txt");
   ofstream NumFile("../NumberPart.txt");
-  ofstream ElectronFile("../Electrons.txt");
-  ofstream IonFile("../Ions.txt");
+
+  // MAKE ELECTRON AND ION FOLDERS IN SLURM FILE
+
+  ofstream ElectronFile("../Electron/Electrons"+to_string(mpi_rank)+".txt");
+  ofstream IonFile("../Ion/Ions"+to_string(mpi_rank)+".txt");
   ofstream TimerFile("../Timer.txt");
    
-  InputFile << "Misc comments: Slurm job" << endl;
+  InputFile << "Misc comments: Slurm job, 0.3 Pa, 2e6 Particles" << endl;
   InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
   InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / dt / NumNodes / NumRanks" << endl;
   InputFile << P << " " << electron.np << " " << ion.np << " " << electron.spwt;
@@ -1471,7 +1479,7 @@ int main(int argc, char **argv)
     ////////////////////////////////////////////////////
     // Display end of iteration
     auto stop_total = steady_clock::now();
-    auto duration_total = duration_cast<seconds>(stop_total-start_total);
+    auto duration_total = duration_cast<minutes>(stop_total-start_total);
     if(mpi_rank == 0) {
       cout << "End of iteration" << endl;
       //cout << "Mass conservation check: vol average density " << dn_tot << endl;
