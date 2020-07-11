@@ -24,7 +24,7 @@ using namespace std::chrono;
 //  To run in comet: 
 //  module purge
 //  module load gnu openmpi_ib
-//  ibrun -n (# cores) ./1D_CCP (# initial particles) (Pressure)
+//  ./1D_CCP (Pressure)
 //
 //  For parallel, have to run a batch script
 //  Made by: Raymond Lau for PDML
@@ -1210,6 +1210,10 @@ int main(int argc, char **argv)
     // Get densities for fluids
     // ion.n[i] should already be reduced
         
+    // Gather n_dot from collisions
+    MPI_Allreduce(MPI_IN_PLACE, &excited.n_dot, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, $neutral.n_dot, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
     for (int i = 0; i < n_cell; ++i) {
       if (i >= elec_range[1] && i < elec_range[2]) {
 	n_tot =  neutral.n[i] + excited.n[i] + ion.n[i];
