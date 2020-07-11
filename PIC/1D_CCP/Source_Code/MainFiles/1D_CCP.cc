@@ -1016,9 +1016,10 @@ int main(int argc, char **argv)
     }
     //cout << elastic_count << " " << null_count << endl;
 
-    // Penning Excitation
+    // Penning Ionization
     for (int i = elec_range[1]; i < elec_range[2]; ++i) {
-      penning_rate = 5.0e-17*pow(excited.n[i], 2.0); // AR* consumed [real part/m^3s]
+      penning_rate = 5.0e-17*pow(excited.n[i], 2.0)/mpi_size; // AR* consumed [real part/m^3s]
+      							      // Normalize rate by number of processors
       int new_ion = round(penning_rate*dx*dt/ion.spwt); // Ions formed [macro part]
 
 
