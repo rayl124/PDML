@@ -200,12 +200,11 @@ int main(int argc, char **argv)
   // //////////////////////////////////////////////////////////
   int max_part = 6e6; // max_particles if none leave during time history
   int total_init_part = atoi(argv[1]);
-  int init_part = round(total_init_part/mpi_size); // initial # particles per processor
-  //if (((int)1e4)%((int)mpi_size)!= 0) {
-  //  cout << "Number of processors must divide initial particles evenly" << endl;
-  //}
+  int init_part = floor(total_init_part/mpi_size); // initial # particles per processor
+  double real_part = f_ion*P*L_inner/(k_B*T_gas);
 
-  double real_part = f_ion*P*L_inner/(k_B*T_gas*mpi_size);
+  int mod_part = total_init_part % mpi_size;
+  if(mpi_rank < mod_part) {init_part += 1;}
 
   // Electron particle data
   particles electron;
@@ -214,7 +213,7 @@ int main(int argc, char **argv)
   electron.q = -1.0*e; //[C]
   electron.np = init_part;
   electron.T = 300.0; //[K]
-  electron.spwt = real_part/((double)electron.np);
+  electron.spwt = real_part/((double)total_init_part);
   electron.gamma[0] = 0.0;
   electron.max_epsilon = 0.0;
 
@@ -225,7 +224,7 @@ int main(int argc, char **argv)
   ion.q = e; //[c]
   ion.np = init_part;
   ion.T = 300.0; //[K]
-  ion.spwt = real_part/((double)ion.np);
+  ion.spwt = real_part/((double)total_init_part);
   ion.gamma[1] = 0.15;
   ion.max_epsilon = 0.0;
 
@@ -282,9 +281,11 @@ int main(int argc, char **argv)
   double d_LJ = 3.542; // [Angstrom]
 
   for (int i = 0; i < n_cell; ++i) {
+    neutral.D[i] = 0.0;
     neutral.n_dot[i] = 0.0;
     neutral.T[i] = 300.0;
 
+    excited.D[i] = 0.0;
     excited.n_dot[i] = 0.0;
     excited.T[i] = 300.0;
 
@@ -323,7 +324,7 @@ int main(int argc, char **argv)
   int search_index;
   int ionized_num = 0;
   double sigma, penning_rate;
-  double P_en_ionization = 0.0;
+  
   //e-ex vars
   double R10, R11, Rtmp1, atmp1, vtmp1, theta1;
 
@@ -392,7 +393,7 @@ int main(int argc, char **argv)
     IonFile << "Iteration / x / vx / vy / vz / Epsilon " << endl;
   }
 
-  NumFile << "Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np" << endl;
+  NumFile << "Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np / Total density (mass conservation)" << endl;
 
   TimerFile << "Time in microseconds. Iter / Coll / Push1 / Fluid / Rho / Phi / E / Push2";
   TimerFile << " / Total min elapsed "<< endl;
@@ -566,8 +567,8 @@ int main(int argc, char **argv)
   }*/
 
   for (int i = 0; i < electron.np; ++i) {
-    get_WeightsCC(electron.x[i], weights, &electron.cell_index[i],
-		     elec_range, dx);
+  //  get_WeightsCC(electron.x[i], weights, &electron.cell_index[i],
+//		     elec_range, dx);
 
     /*
     electron.epsilon_bulk[electron.cell_index[i]] += electron.spwt*weights[0]*electron.epsilon[i];
@@ -584,8 +585,8 @@ int main(int argc, char **argv)
   }
 
   for (int i = 0; i < ion.np; ++i) {
-    get_WeightsCC(ion.x[i], weights, &ion.cell_index[i],
-		     elec_range, dx);
+    //get_WeightsCC(ion.x[i], weights, &ion.cell_index[i],
+//		     elec_range, dx);
 
     /*
     ion.epsilon_bulk[ion.cell_index[i]] += ion.spwt*weights[0]*ion.epsilon[i];
@@ -640,17 +641,23 @@ int main(int argc, char **argv)
   excited.n_bar /= elec_range[2] - elec_range[1];
   ion.n_bar /= elec_range[2] - elec_range[1];
   electron.n_bar /= elec_range[2] - elec_range[1];
-
-  MPI_Reduce(&electron.np, &electron.np_total, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&ion.np, &ion.np_total, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&electron.inner_np, &electron.inner_np_total, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&ion.inner_np, &ion.inner_np_total, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+      
+  MPI_Reduce(&electron.np, &electron.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&ion.np, &ion.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&electron.inner_np, &electron.inner_np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&ion.inner_np, &ion.inner_np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  
+  double dn_tot = 0.0;
+  for(int i = 0; i < n_cell; ++i) {
+    dn_tot += ion.n[i] + neutral.n[i] + excited.n[i];
+  } 
+  dn_tot /= (double) (elec_range[2]-elec_range[1]);
 
   if(mpi_rank == 0){
     FieldAverageFile << 0  << " " << neutral.n_bar << " " << excited.n_bar;
     FieldAverageFile << " " << ion.n_bar << " " << electron.n_bar << endl;
     NumFile << 0 << " " << electron.np_total << " " << ion.np_total << " ";
-    NumFile << electron.inner_np_total << " " << ion.inner_np_total << endl;
+    NumFile << electron.inner_np_total << " " << ion.inner_np_total << " " << dn_tot << endl;
   }
 /////////////////////////////////////////////////////////////////////////////////////////////////  
   //////////////////////////////////////////////////////////
@@ -723,42 +730,28 @@ int main(int argc, char **argv)
     //cout << N_c_en << " " << electron.max_epsilon << endl;
 
     for (int i = 0; i < N_c_en; ++i) {
-      rand_index = round((double(rand())/RAND_MAX)*(electron.np-1));
+      rand_index = floor(((double)rand()/RAND_MAX)*(electron.np));
+      if(rand_index == electron.np) {rand_index--;}
       
       while (isnan(electron.epsilon[rand_index])) {
-	  cout << "Error at 622" << endl;
+	cout << "Error at 622" << endl;
+	return -1;
       }
-      if (electron.epsilon[rand_index] > 1.60055e1) {
-        // Use the neutral density of the cell that the randomly chose particle is in
-        type = getCollType(CS_energy, e_n_CS, P_en_ionization, electron.epsilon[rand_index], 
+      // Use the neutral density of the cell that the randomly chose particle is in
+      type = getCollType(CS_energy, e_n_CS, electron.epsilon[rand_index], 
 		    nu_max_en, electron.m, neutral.n[electron.node_index[rand_index]],
 		    N_coll[0], data_set_length);
-
-	// Cumulation of probability if ionization does not occur
-	if (type != (3||4) ) {
-	  search_index = searchIndex(electron.epsilon[rand_index], CS_energy, 
-			  data_set_length);
-	  sigma = linInterp(electron.epsilon[rand_index], CS_energy[search_index],
-			  CS_energy[search_index+1], e_n_CS[3*data_set_length + search_index],
-			  e_n_CS[3*data_set_length+search_index]);
-          //P_en_ionization += (getP(electron.epsilon[rand_index], sigma, electron.m,
-	  //		  neutral.n[electron.node_index[rand_index]], dt))/P_max;
-	}	
-      } else {
-	type = getCollType(CS_energy, e_n_CS, 0.0, electron.epsilon[rand_index], 
-		    nu_max_en, electron.m, neutral.n[electron.node_index[rand_index]],
-		    N_coll[0], data_set_length);
-      }
-
-      if (type == 3) {
-        type = 4;
-      }
+      
+	  double elec_prev = electron.epsilon[rand_index];
+	  double elec_vx_prev = electron.vx[rand_index];
+	  double elec_vy_prev = electron.vy[rand_index];
+	  double elec_vz_prev = electron.vz[rand_index];
       // switch-case for electron-neutral collisions
       // 0 - elastic
       // 1 - excitation 1
       // 2 - excitation 2
-      // 3/4 - ionization
-      // 5 - null
+      // 3 - ionization
+      // 4 - null
       switch(type) {
         case 0:
 	  elastic_count += 1;
@@ -771,7 +764,11 @@ int main(int argc, char **argv)
 
           while (isnan(electron.epsilon[rand_index])) {
 	    cout << "Error at 665" << endl;
-          }
+	    cout << rand_index << " " << electron.m << " " << neutral.m << " " << electron.np << endl;
+	    cout << elec_prev << " " << elec_vx_prev << " " << elec_vy_prev << " " <<  elec_vz_prev << endl;
+	    cout << electron.vx[rand_index] << " " << electron.vy[rand_index]<< " " << electron.vz[rand_index] << endl;
+            return -1;
+	  }
 
 	  continue;
         case 1:
@@ -785,7 +782,8 @@ int main(int argc, char **argv)
 
           while (isnan(electron.epsilon[rand_index])) {
 	    cout << "Error at 679" << endl;
-          }   
+            return -1;
+	  }   
 
 
 	  // Update n_dot
@@ -811,7 +809,8 @@ int main(int argc, char **argv)
 
           while (isnan(electron.epsilon[rand_index])) {
 	    cout << "Error at 705" << endl;
-          }
+            return -1;
+	  }
 
 
 	  // Update n_dot
@@ -827,9 +826,8 @@ int main(int argc, char **argv)
 		  electron.spwt*weights[1]/(dx*dt);
 
 	  continue;
-        case 4:
+        case 3:
 	  ionized_num += 1;
-	  P_en_ionization = 0.0;
 	  electron.np += 1;
 	  electron.x[electron.np-1] = electron.x[rand_index];
 	  electron.vx[electron.np-1] = 0.0;
@@ -857,11 +855,13 @@ int main(int argc, char **argv)
 
           while (isnan(electron.epsilon[rand_index])) {
 	    cout << "Error at 740" << endl;
-          }
+            return -1;
+	  }
 
 	  while (isnan(electron.epsilon[electron.np-1])) {
 	    cout << "Error at 744" << endl;
-          }
+            return -1;
+	  }
 
 	  // Update n_dot
 	  get_WeightsCC(electron.x[rand_index], weights, 
@@ -871,7 +871,7 @@ int main(int argc, char **argv)
 	  neutral.n_dot[electron.cell_index[rand_index] + 1] -=
 		  electron.spwt*weights[1]/(dt*dx);
 	  continue;	
-        case 5:
+        case 4:
 	  null_count += 1;
 	  continue;
       }
@@ -879,22 +879,22 @@ int main(int argc, char **argv)
     //cout << elastic_count << " " << null_count << endl;
 
     if(mpi_rank==0){cout << "Calculating electron-excited collisions..." << endl;}
-
+    
     //cout << N_c_eex << endl;
 
     elastic_count = 0;
     null_count = 0;
     for (int i = 0; i < N_c_eex; ++i) {
-      rand_index = round((double(rand())/RAND_MAX)*(electron.np-1));
-
-      type = getCollType(CS_energy, e_ex_CS, 0.0, electron.epsilon[rand_index],
+      rand_index = floor((double(rand())/RAND_MAX)*(electron.np));
+      if(rand_index == electron.np) {rand_index--;}
+      
+      type = getCollType(CS_energy, e_ex_CS, electron.epsilon[rand_index],
 		    nu_max_eex, electron.m, excited.n[electron.node_index[rand_index]],
 		    N_coll[1], data_set_length);
-      if (type == 3) {type = 2;}
 
       // switch-case for electron-excited collisions
       // 0 - Step Ionization
-      // 1 - Superelastic (De-excitation)
+      /// 1 - Superelastic (De-excitation)
       // 2 - null
       switch(type) {
         case 0:
@@ -910,7 +910,7 @@ int main(int argc, char **argv)
 		  &electron.vy[electron.np-1], &electron.vz[electron.np-1], 
 		  electron.epsilon[rand_index], epsilon_ion);
 	  electron.epsilon[rand_index] = 0.5*electron.m*pow(getv(electron.vx[rand_index], 
-			electron.vy[rand_index], electron.vz[rand_index]),2.0)/e; //[eV]
+		  electron.vy[rand_index], electron.vz[rand_index]),2.0)/e; //[eV]
 	  electron.epsilon[electron.np-1] = 0.5*electron.m*
 		  pow(getv(electron.vx[electron.np-1],
 		  electron.vy[electron.np-1], 
@@ -918,12 +918,19 @@ int main(int argc, char **argv)
 
           while (isnan(electron.epsilon[rand_index])) {
 	    cout << "Error at 854" << endl;
-          }
+            return -1;
+	  }
           while (isnan(electron.epsilon[electron.np-1])) {
 	    cout << "Error at 854" << endl;
+	    return -1;
           }
 
-
+	  // Create ion  
+	  ion.np += 1;
+	  ion.x[ion.np-1] = electron.x[rand_index];
+	  ion.thermalVelocity(ion.np-1);
+    	  ion.epsilon[ion.np-1] = 0.5*ion.m*pow(getv(ion.vx[ion.np-1], ion.vy[ion.np-1],
+		  	          ion.vz[ion.np-1]),2.0)/e;
 	  // Update n_dot
 	  get_WeightsCC(electron.x[rand_index], weights, 
 			  &electron.cell_index[rand_index], elec_range, dx);
@@ -946,7 +953,10 @@ int main(int argc, char **argv)
 	  electron.vx[rand_index] = vtmp1*atmp1*cos(theta1);
 	  electron.vy[rand_index] = vtmp1*atmp1*sin(theta1);
 	  electron.vz[rand_index] = vtmp1*Rtmp1;
-
+	  
+          electron.epsilon[rand_index] = 0.5*electron.m*
+		  pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
+		  electron.vz[rand_index]),2.0)/e;
 	  // Update n_dot
 	  get_WeightsCC(electron.x[rand_index], weights, 
 			  &electron.cell_index[rand_index], elec_range, dx);
@@ -973,11 +983,11 @@ int main(int argc, char **argv)
     null_count = 0;
 
     for (int i = 0; i < N_c_in; ++i) {
-      rand_index = round((double(rand())/RAND_MAX)*(ion.np-1));
-      type = getCollType(CS_energy, i_n_CS, 0.0, ion.epsilon[rand_index],
+      rand_index = floor((double(rand())/RAND_MAX)*(ion.np));
+      if(rand_index == ion.np) {rand_index--;}
+      type = getCollType(CS_energy, i_n_CS, ion.epsilon[rand_index],
 		    nu_max_in, ion.m, neutral.n[ion.node_index[rand_index]],
 		    N_coll[2], data_set_length);
-      if (type == 3) {type = 2;}
       // switch-case for electron-neutral collisions
       // 0 - isotropic
       // 1 - charge exchange
@@ -1016,13 +1026,14 @@ int main(int argc, char **argv)
     }
     //cout << elastic_count << " " << null_count << endl;
 
-    // Penning Ionization
+    // Penning Excitation
     for (int i = elec_range[1]; i < elec_range[2]; ++i) {
-      penning_rate = 5.0e-17*pow(excited.n[i], 2.0)/mpi_size; // AR* consumed [real part/m^3s]
-      							      // Normalize rate by number of processors
-      int new_ion = round(penning_rate*dx*dt/ion.spwt); // Ions formed [macro part]
+      penning_rate = 5.0e-17*pow(excited.n[i], 2.0); // AR* consumed [real part/m^3s]
+      penning_rate /= mpi_size;
+      int new_ion = floor(penning_rate*dx*dt/ion.spwt); // Ions formed [macro part]
 
-
+      R = (double)rand()/((double)RAND_MAX);
+      if (R < (penning_rate*dt*dt/ion.spwt - new_ion)) {new_ion++;}
 
       for (int p = 0; p < new_ion; ++p) {
         ion.np += 1;
@@ -1034,7 +1045,10 @@ int main(int argc, char **argv)
         electron.np += 1;
 	electron.x[electron.np-1] = (double(rand())/RAND_MAX)*dx + dx*i;
 
-	electron.epsilon[rand_index] += 0.5*(1.30940e1+1.159330e1)-1.599550e1;;
+	// AR* + AR* -> AR+ + AR
+	// 2*excitation - ionization
+	// excitation = average of 2 excitation energies
+	electron.epsilon[electron.np-1] = (1.30940e1+1.159330e1)-1.599550e1;
 	R10 = ((double)rand())/((double) RAND_MAX);
 	R11 = ((double)rand())/((double) RAND_MAX);
 	theta1 = 2.0*M_PI*R10;
@@ -1042,9 +1056,13 @@ int main(int argc, char **argv)
 	atmp1 = sqrt(1.0-Rtmp1*Rtmp1);
 	vtmp1 = sqrt(2.0*e*electron.epsilon[rand_index]/electron.m);
 	
-	electron.vx[rand_index] = vtmp1*atmp1*cos(theta1);
-	electron.vy[rand_index] = vtmp1*atmp1*sin(theta1);
-	electron.vz[rand_index] = vtmp1*Rtmp1;
+	electron.vx[electron.np-1] = vtmp1*atmp1*cos(theta1);
+	electron.vy[electron.np-1] = vtmp1*atmp1*sin(theta1);
+	electron.vz[electron.np-1] = vtmp1*Rtmp1;
+	
+	// Get actual kinetic energy
+        electron.epsilon[electron.np-1] = 0.5*electron.m*pow(getv(electron.vx[electron.np-1], 
+					  electron.vy[electron.np-1], electron.vz[electron.np-1]),2.0)/e;
       }
       neutral.n_dot[i] += penning_rate; // Increase in density
       excited.n_dot[i] -= 2.0*penning_rate; // Decrease in density
@@ -1070,7 +1088,7 @@ int main(int argc, char **argv)
 
     //////////////////////////////////////////////////
     //
-    // Move particles
+    // Accelerate/Move particles
     // -- n to n+1
     //
     // v^n -> v^{n+1/2}
@@ -1098,35 +1116,11 @@ int main(int argc, char **argv)
       // if not, absorb particle
       if (electron.x[p] < x_bias ||
 	  electron.x[p] > x_ground) {
-	/*
-	// Elastic
-	
-	R = ((double)rand())/((double) RAND_MAX);
-
-	if(R < electron.gamma[0]) {
-	  if (electron.x[p] < x_bias) {
-	    time_coll = (electron.x[p] - x_bias)/electron.vx[p];
-	    while(time_coll < 0.0 || time_coll > dt) 
-	    {cout << "Error in elastic collision" << endl;}
-	    electron.vx[p] = -electron.vx[p];
-	    electron.x[p] = x_bias + electron.vx[p]*time_coll;
-
-	  } else {
-	    time_coll = (electron.x[p] - x_ground)/electron.vx[p];
-	    while(time_coll < 0.0 || time_coll > dt) 
-	    {cout << "Error in elastic collision" << endl;}
-	    electron.vx[p] = -electron.vx[p];
-	    electron.x[p] = x_ground + electron.vx[p]*time_coll;
-	  }
-	}
-       */
 	// Absorption
-	//else {
-	  if (electron.x[p] < x_bias) {electron.flux_L -= electron.spwt/dt;}
-	  else {electron.flux_R += electron.spwt/dt;}
-	  electron.remove_part(p);
- 	  --p;
-	//} 
+	if (electron.x[p] < x_bias) {electron.flux_L -= electron.spwt/dt;}
+	else {electron.flux_R += electron.spwt/dt;}
+	electron.remove_part(p);
+ 	--p; 
       }
     }
 
@@ -1210,14 +1204,15 @@ int main(int argc, char **argv)
 
     // Get densities for fluids
     // ion.n[i] should already be reduced
-        
     // Gather n_dot from collisions
-    MPI_Allreduce(MPI_IN_PLACE, &excited.n_dot, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, $neutral.n_dot, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, excited.n_dot, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, neutral.n_dot, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     for (int i = 0; i < n_cell; ++i) {
+      
       if (i >= elec_range[1] && i < elec_range[2]) {
 	n_tot =  neutral.n[i] + excited.n[i] + ion.n[i];
+
 	neutral.D[i] = 3.0*sqrt(k_B*neutral.T[i]) /
 		      (8.0*sqrt(M_PI*neutral.m)*d_LJ*d_LJ*1.0e-20*n_tot);
         excited.D[i] = 3.0*sqrt(k_B*excited.T[i]) /
@@ -1227,7 +1222,6 @@ int main(int argc, char **argv)
 	excited.D[i] = 0.0;
       }
     }
-
     driftDiffusionFVExplicit2(&excited.n[elec_range[1]], 
 			      &excited.n_dot[elec_range[1]],
 	 		      &excited.D[elec_range[1]],
@@ -1258,12 +1252,15 @@ int main(int argc, char **argv)
 
     while(abs(neutral.flux_L) > 1e-5 || abs(neutral.flux_R) > 1e-5) {
       cout << "Error: We have set Neumann" << endl;
+      return -1; 
     }
     while (excited.flux_L > esmall || excited.flux_R < -esmall) {
       cout << "Error: Excited is generated" << endl;
+      return -1;
     }
     while (ion.flux_L > esmall || ion.flux_R < -esmall) {
       cout << "Error: Ion is generated" << endl;
+      return -1;
     }
 
     stop = steady_clock::now();
@@ -1407,7 +1404,7 @@ int main(int argc, char **argv)
 
     //////////////////////////////////////////////////
     //
-    // Move particles
+    // Accelerate particles
     // Part 2
     // v^{n+1/2} -> v^{n+1}
     //
@@ -1442,7 +1439,7 @@ int main(int argc, char **argv)
       // Interpolate electric field
       get_WeightsNC(ion.x[p], weights, &ion.node_index[p], dx);
       ion.E[p] = E_field[ion.node_index[p]]*weights[0] +
-	      E_field[ion.node_index[p] + 1]*weights[1];
+	         E_field[ion.node_index[p] + 1]*weights[1];
 
       // Push ions
       ion.vx[p] = ion.vx[p] + ion.q/(ion.m) * ion.E[p]*(0.5*dt);
@@ -1460,14 +1457,15 @@ int main(int argc, char **argv)
     duration = duration_cast<microseconds>(stop-start);
     auto time_push2 = duration.count();
 
-    /*
+    
     // Check mass conservation
-    double dn_tot = 0.0;
+    dn_tot = 0.0;
     for(int k = elec_range[1]; k < elec_range[2]; ++k) {
       dn_tot += ion.n[k]+neutral.n[k]+excited.n[k];
     }
     dn_tot /= ((double)(elec_range[2]-elec_range[1]));
 
+    /*
     // Check charge conservation
     double dn_tote = 0.0;
     for(int k = elec_range[1]; k < elec_range[2]; ++k) {
@@ -1487,7 +1485,7 @@ int main(int argc, char **argv)
     auto duration_total = duration_cast<minutes>(stop_total-start_total);
     if(mpi_rank == 0) {
       cout << "End of iteration" << endl;
-      //cout << "Mass conservation check: vol average density " << dn_tot << endl;
+      cout << "Mass conservation check: vol average density " << dn_tot << endl;
       //cout << "Charge conservation check: total charge - lost to wall " << dn_tote << endl;
     }
 
@@ -1592,6 +1590,7 @@ int main(int argc, char **argv)
       excited.n_bar /= elec_range[2] - elec_range[1];
       ion.n_bar /= elec_range[2] - elec_range[1];
       electron.n_bar /= elec_range[2] - elec_range[1];
+      
       MPI_Reduce(&electron.inner_np, &electron.inner_np_total, 1, 
 		      MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
       MPI_Reduce(&ion.inner_np, &ion.inner_np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -1600,7 +1599,7 @@ int main(int argc, char **argv)
         FieldAverageFile << iter << " " << neutral.n_bar << " " << excited.n_bar;
         FieldAverageFile << " " << ion.n_bar << " " << electron.n_bar << " " << endl;
         NumFile << iter << " " << electron.np_total << " " << ion.np_total << " ";
-        NumFile << electron.inner_np_total << " " << ion.inner_np_total << endl;
+        NumFile << electron.inner_np_total << " " << ion.inner_np_total << " " << dn_tot << endl;
         TimerFile << iter << " " << time_coll << " " << time_push1 << " ";
         TimerFile << time_fluid << " " << time_rho << " " << time_phi << " ";
         TimerFile << time_E << " " << time_push2 << " " << duration_total.count() << endl;
@@ -1628,6 +1627,5 @@ int main(int argc, char **argv)
   excited.clean();
   
   MPI_Finalize();
-
   return 0;
 }

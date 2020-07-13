@@ -170,7 +170,10 @@ void getNullCollPart(double *CS_energy,
   *P_max *= 2.0;
   *nu_max *= 2.0;
 
-  *N_c = round(np*(*P_max));
+  double n_total = (double) np*(*P_max);
+  *N_c = floor(n_total);
+  double R = (double) rand()/((double) RAND_MAX);
+  if (R < (n_total - *N_c)) {(*N_c)++;}
 }
 
 
@@ -190,14 +193,13 @@ void getNullCollPart(double *CS_energy,
 */ 	
 
 int getCollType(double *CS_energy,
-		   double *CS_data,
-		   double P_en_ionization,
+		   double *CS_data,		
 		   double epsilon,
 		   double nu_max,
 		   double m_source, double n_target,
 		   int N_coll, int data_set_length)
 {
-  double *P_vec = new double[N_coll + 2]; // Include P0 = 0 and P ionization at end
+  double *P_vec = new double[N_coll + 1]; // Include P0 = 0 
   double *sigma = new double[N_coll];  
   double *nu = new double[N_coll];
   double sigma_total;
@@ -212,7 +214,7 @@ int getCollType(double *CS_energy,
 	       CS_data[i*data_set_length + search_index + 1]);
   }
     
-  double v = sqrt(2*e*epsilon/m_source);
+  double v = sqrt(2.0*e*epsilon/m_source);
   // P0 = 0, P1 = nu_1/nu_max, p2 ....
   P_vec[0] = 0.0;
   for (int i = 0; i < N_coll; ++i) {
@@ -223,15 +225,11 @@ int getCollType(double *CS_energy,
     }
     P_vec[i+1] = P_vec[i+1]/nu_max;
   }
-  P_vec[N_coll + 1] = P_vec[N_coll] + P_en_ionization;
   
-  if (P_vec[N_coll + 1] - P_vec[N_coll - 1] > 1.0) {
-    search_index = N_coll;
-  } else {
-    double R = double(rand())/RAND_MAX;
-    // if P_i < R < P_i+1, collision is type i, where tyoe N_coll is null
-    search_index = searchIndex(R, P_vec, N_coll + 2);
-  }
+  double R = double(rand())/RAND_MAX;
+  // if P_i < R < P_i+1, collision is type i, where tyoe N_coll is null
+  search_index = searchIndex(R, P_vec, N_coll + 1);
+  
   delete(P_vec);
   delete(sigma);
   delete(nu);
@@ -304,7 +302,7 @@ void e_elastic(double *part_vx,
   double R2 = double(rand())/RAND_MAX;
 
   // Scattering angles
-  double chi = acos((2+epsilon-2*pow(1+epsilon, R1))/epsilon);
+  double chi = acos((2.0+epsilon-2.0*pow(1.0+epsilon, R1))/epsilon);
   double phi = R2*2.0*M_PI;
 
   // Scatter the velocity
@@ -332,7 +330,7 @@ void e_elastic(double *part_vx,
   // Energy loss correction
   double delta_epsilon = 2.0*m_e*(1.0-cos(chi))*epsilon/m_n;
   double alpha = sqrt(1.0-delta_epsilon/epsilon);
-
+  if (delta_epsilon > epsilon) {cout << "Error in elastic: epislon was " << epsilon << endl;}
   *part_vx = alpha*v_newx;
   *part_vy = alpha*v_newy;
   *part_vz = alpha*v_newz;
