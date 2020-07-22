@@ -1,5 +1,5 @@
 #include <iostream>
-#include "collisionModules.h"
+#include "collisionModules_old.h"
 
 class particles {
   int max_part;  // Max particles
@@ -21,13 +21,10 @@ class particles {
     int *cell_index;
 
     // Field arrays
-    double *n;   	   // Number density in m^-3, local
-    double *n_ss;	   // Number density for steady state to be averaged at the end
-    double *mean_epsilon;  // Mean energy
-    double *ux;		   // Bulk vx
-    double *uy;		   // Bulk vy
-    double *uz;		   // Bulk vz
-    double *fieldT;
+    double *n;   // Number density in m^-3, local
+    double *n_master; // Global number density
+    double *epsilon_bulk;
+    double *vx_bulk;
 
     double T;  // Temperature in K
     double m;  // Mass in kg
@@ -50,7 +47,6 @@ class particles {
     void remove_part(int index);
     void thermalVelocity(int index);
     void injectionVelocity(int index);
-    void getDiagnosticsLocal(double *weights, int p, double dx);
 };
 
 // Initializes arrays, required every time a new
@@ -70,24 +66,11 @@ void particles::initialize(int max_part, int n_cell) {
 
 
   n = new double[n_cell];
-  n_ss = new double[n_cell];
-  mean_epsilon = new double[n_cell];
-  ux = new double[n_cell];
-  uy = new double[n_cell];
-  uz = new double[n_cell];
-  fieldT = new double[n_cell];
-
-  for (int i = 0; i < n_cell; ++i) {
-    n_ss[i] = 0.0;
-    mean_epsilon[i] = 0.0;
-    ux[i] = 0.0;
-    uy[i] = 0.0;
-    uz[i] = 0.0;
-    fieldT[i] = 0.0;
-  }
+  n_master = new double[n_cell];
+  epsilon_bulk = new double[n_cell];
+  vx_bulk = new double[n_cell];
   gamma = new double[2]; 
 }
-
 
 // Frees memory when simulation is done
 void particles::clean(void) {
@@ -99,12 +82,9 @@ void particles::clean(void) {
   delete(node_index);
   delete(cell_index);
   delete(n);
-  delete(n_ss);
-  delete(mean_epsilon);
-  delete(ux);
-  delete(uy);
-  delete(uz);
-  delete(fieldT);
+  delete(n_master);
+  delete(epsilon_bulk);
+  delete(vx_bulk);
   delete(gamma);
   delete(E);
 }
@@ -119,40 +99,23 @@ void particles::remove_part(int index) {
   epsilon[index] = epsilon[np-1];
   node_index[index] = node_index[np-1];
   cell_index[index] = cell_index[np-1];
-  E[index] = E[np-1];
   np -= 1;
 }
 
 // Gives a particle a velocity from its thermal velocity
 void particles::thermalVelocity(int index) {
-  thermalVelSample(&vx[index], &vy[index], &vz[index], T, m);
+  thermalVelSample(&vx[index], &vy[index], &vz[index],
+		  T, m);
 }
 
 void particles::injectionVelocity(int index) {
-  thermalBiasVelSample(&vx[index], &vy[index], &vz[index], T, m);
-}
-
-void particles::getDiagnosticsLocal(double *weights, int index, double dx)
-{
-  n_ss[cell_index[index]] += spwt*weights[0]/dx;
-  n_ss[cell_index[index]+1] += spwt*weights[1]/dx;
-
-  ux[cell_index[index]] += spwt*weights[0]*vx[index]/dx;
-  ux[cell_index[index] + 1] += spwt*weights[1]*vx[index]/dx;
-  uy[cell_index[index]] += spwt*weights[0]*vy[index]/dx;
-  uy[cell_index[index] + 1] += spwt*weights[1]*vy[index]/dx;
-  uz[cell_index[index]] += spwt*weights[0]*vz[index]/dx;
-  uz[cell_index[index] + 1] += spwt*weights[1]*vz[index]/dx;
-
-  mean_epsilon[cell_index[index]] += spwt*weights[0]*epsilon[index]/dx;
-  mean_epsilon[cell_index[index] + 1] += spwt*weights[1]*epsilon[index]/dx; 
-
+  thermalBiasVelSample(&vx[index], &vy[index], &vz[index],
+		  T, m);
 }
 
 class fluid {
   public:
     double *n;
-    double *n_ss;
     double *n_dot;
     double *f_coeff;
     double *T;
@@ -173,7 +136,6 @@ class fluid {
 
 void fluid::initialize(int n_cell) {
   n = new double[n_cell];
-  n_ss = new double[n_cell];
   n_dot = new double[n_cell];
   f_coeff = new double[n_cell];
   T = new double[n_cell];
@@ -182,10 +144,6 @@ void fluid::initialize(int n_cell) {
   D = new double[n_cell];
   flux_L = 0.0;
   flux_R = 0.0;
-
-  for (int i = 0; i < n_cell; ++i) {
-    n_ss[i] = 0.0;
-  }
 }
 
 void fluid::clean() {
@@ -196,7 +154,6 @@ void fluid::clean() {
   delete(v);
   delete(beta);
   delete(D);
-  delete(n_ss);
 }
 
 double fluid::getMomentumCS(int index) {

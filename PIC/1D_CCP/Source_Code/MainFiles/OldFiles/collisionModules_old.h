@@ -1,5 +1,5 @@
-#ifndef _COLLISIONMODULES_H
-#define _COLLISIONMODULES_H
+#ifndef _COLLISIONMODULES_OLD_H
+#define _COLLISIONMODULES_OLD_H
 
 #include <iostream>
 #include <ctime>

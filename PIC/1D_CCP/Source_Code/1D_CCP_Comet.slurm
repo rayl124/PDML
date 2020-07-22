@@ -5,14 +5,14 @@
 #SBATCH --nodes=1			# Number of nodes
 #SBATCH --ntasks-per-node=24		# Cores per node
 #SBATCH --export=ALL			
-#SBATCH -t 10:00:00			# Time limit
+#SBATCH -t 20:00:00			# Time limit
 					# At minimum, time*cores = 1 hour
 
 #SBATCH --mail-type=BEGIN,END,FAIL	# What events will be mailed to you
 #SBATCH --mail-user=rl49@stanford.edu	# Email these events will be sent to
 
 JOBNAME=$SLURM_JOB_NAME
-RUNNUM=15
+RUNNUM=30
 # Modules
 module purge				# Erases any current modules
 module load gnu openmpi_ib		# Load module for compiling
@@ -20,13 +20,15 @@ module load gnu openmpi_ib		# Load module for compiling
 # Create folder to store results in
 mkdir ../Results/$JOBNAME.run$RUNNUM
 cp -r MainFiles ../Results/$JOBNAME.run$RUNNUM
+#cp OutFiles/1D_CCP.%j.out ../Results/$JOBNAME.run$RUNNUM
 cd ../Results/$JOBNAME.run$RUNNUM/MainFiles
+
 mkdir ../Ion
 mkdir ../Electron
 
 # Compilation code: 
 mpicxx -Ofast -o 1D_CCP 1D_CCP.cc -lm 	# Compiles code
-ibrun -n 24 --binding-level=core ./1D_CCP 1000000 1.4 # Runs code with an input of 0.3 Pascals
+ibrun -n 24 --binding-level=core ./1D_CCP 1000000 2.6 # Runs code with an input of 0.3 Pascals
 
 # Uncomment for extra job
 #cd ../../../Source_Code
