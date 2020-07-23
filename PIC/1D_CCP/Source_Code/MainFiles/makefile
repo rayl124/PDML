@@ -15,6 +15,8 @@ collision_test: collision_test.cc collisionModules.h
 
 driftDiffusionTest: driftDiffusionTest.cc
 	$(CC) -g -o driftDiffusionTest driftDiffusionTest.cc -lm
+accelerationTest: accelerationTest.cc
+	$(CC) -g -o accelerationTest accelerationTest.cc -lm
 
 simpsonsTest: simpsonsTest.cc
 	$(CC) -g -o simpsonsTest simpsonsTest.cc -lm
