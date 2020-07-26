@@ -15,8 +15,6 @@ collision_test: collision_test.cc collisionModules.h
 
 driftDiffusionTest: driftDiffusionTest.cc
 	$(CC) -g -o driftDiffusionTest driftDiffusionTest.cc -lm
-accelerationTest: accelerationTest.cc
-	$(CC) -g -o accelerationTest accelerationTest.cc -lm
 
 simpsonsTest: simpsonsTest.cc
 	$(CC) -g -o simpsonsTest simpsonsTest.cc -lm
@@ -25,7 +23,10 @@ getDTest: getDTest.cc
 	$(CC) -g -o getDTest getDTest.cc -lm
 
 1D_CCP: 1D_CCP.cc
-	$(MPI_CC) -Ofast -o 1D_CCP 1D_CCP.cc -lm
+	$(MPI_CC) -Ofast -std=c++11 -o 1D_CCP 1D_CCP.cc -lm
+
+1D_CCP_restart: 1D_CCP_restart.cc
+	$(MPI_CC) -Ofast -std=c++11 -o 1D_CCP_restart 1D_CCP_restart.cc -lm
 
 uploadGIT: 
 	cd ..; \

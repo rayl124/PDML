@@ -101,10 +101,10 @@ void lagrangePoly(double x_target, double *x,
 }
 
 
-////////////////////////////////////////////////////////////////////////
-//																																		//
-//															Main Loop														 //
-//																																		//
+//////////////////////////////////////////////////////////////////////////
+//																		//
+//					Main Loop											//
+//																		/
 ////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char **argv) 
@@ -127,19 +127,57 @@ int main(int argc, char **argv)
 
 	// Input Parameters
 	//double P = 0.3; //[Pa]
-	double P = atof(argv[2]);
+	//double P = atof(argv[2]);
 	double T_gas = 300.0; // [K]
 	double f_ground = 1.0;
-	//double f_excite = 5.0e-5;
-	double f_excite = 2.0e-4;
+	double f_excite = 5.0e-5;
+	//double f_excite = 2.0e-4;
 	double f_ion = 7.5e-6;
 	double f_tot = f_ground + f_excite + f_ion;
 	f_ground /= f_tot;
 	f_excite /= f_tot;
 	f_ion /= f_tot;
 
+	//////////////////////////////////////////////////////////////////////////////////////
+	//
+	//	Set up restart info
+	//
+	//////////////////////////////////////////////////////////////////
+	int start_iter = atoi(argv[1]);
+	ifstream data("../Input.txt");
+
+	// Ignore the first 2 lines
+	data.ignore(1e5, '\n');
+	data.ignore(1e5, '\n');
+	double temp_data; // Variable for reading data that doesn't need to be saved
+	double P;
+	data >> P;
+	int total_init_part;
+	data >> total_init_part;
+	
+	for (int i = 0; i < 3; ++i) {
+		data >> temp_data; //ion and electron have same total init part
+	}
+	double V_hf;
+	data >> V_hf;
+	double V_lf;
+	data >> V_lf;
+	double f_hf;
+	data >> f_hf;
+	double f_lf;
+	data >> f_lf;
+	int ts;
+	data >> ts;
+	int ts_ss; 
+	data >> ts_ss;
+	double dt; 
+	data >> dt;
+	int nn;
+	data >> nn;
+
+	data.close();
 	// Problem discretization
-	int nn = 191; // # of x1 nodes
+	//int nn = 191; // # of x1 nodes
 	int n_cell = nn-1; // # of cells
 	double x_start = 0.0;
 	double x_end = 0.095;
@@ -160,21 +198,22 @@ int main(int argc, char **argv)
 	elec_range[1] = round((x_bias-x_start)/dx + esmall);
 	elec_range[2] = round((x_ground-x_start)/dx + esmall); // left side ground
 	elec_range[3] = round ((x_end-x_start)/dx + esmall); // right side ground
-	double f_hf = 27.12e6; // Hz
-	double f_lf = 271.2e3; // Hz
-	double V_hf = 110.0; // V
-	double V_lf = 281.9; // V
+	//double f_hf = 27.12e6; // Hz
+	//double f_lf = 271.2e3; // Hz
+	//double V_hf = 110.0; // V
+	//double V_lf = 281.9; // V
 	double phi_left;
 	double phi_right = 0.0;
 
 	// Time
 	// Timesteps per HF * Cycles HF per LF * # LF
-	int ts_hf = 200;
-	int n_cycle = 120;
-	int n_cycle_ss = 5;
-	int ts = ts_hf*100*n_cycle; // # of time steps for main simulation
-	int ts_ss = ts_hf*100*n_cycle_ss;			// # of steady state time steps for bulk analysis
-	double dt = 1.0/(f_hf*((double)ts_hf)); 
+	//int ts_hf = 200;
+	//int n_cycle = 120;
+	//int n_cycle_ss = 5;
+	//int ts = ts_hf*100*n_cycle; // # of time steps for main simulation
+	//int ts_ss = ts_hf*100*n_cycle_ss;			// # of steady state time steps for bulk analysis
+	//double dt = 1.0/(f_hf*((double)ts_hf)); 
+
 
 	//////////////////////////////////////////////////////////////
 	//
@@ -214,7 +253,6 @@ int main(int argc, char **argv)
 
 	coll_data.close();
 
-
 	///////////////////////////////////////////////////////////////
 	//
 	// Particle variables
@@ -222,7 +260,7 @@ int main(int argc, char **argv)
 	// //////////////////////////////////////////////////////////
 	if(mpi_rank==0){cout<<"Loading particle data"<<endl;}
 	int max_part = 6e6; // max_particles if none leave during time history
-	int total_init_part = atoi(argv[1]);
+	//int total_init_part = atoi(argv[1]);
 	int init_part = floor(total_init_part/((double)mpi_size)); // initial # particles per processor
 	double real_part = f_ion*P*L_inner/(k_B*T_gas);
 
@@ -251,31 +289,52 @@ int main(int argc, char **argv)
 	ion.gamma[1] = 0.15;
 	ion.max_epsilon = 0.0;
 
-	// Uniformly distribute initial positions, assign initial velocity from
-	// thermal distribution
-	for (int i = 0; i < electron.np; ++i) {
-		electron.x[i] = ranf()*L_inner + x_bias;
-		//cout << "electron.x[i] = " << electron.x[i] << endl;
-		if (electron.x[i] < x_bias) { 
-			cout << "error" << endl;}
-		electron.thermalVelocity(i);
-		electron.epsilon[i] = 0.5*electron.m*pow(getv(electron.vx[i], electron.vy[i],
-							electron.vz[i]),2.0)/ech;
 
-		if (electron.epsilon[i] > electron.max_epsilon) 
-		{electron.max_epsilon = electron.epsilon[i];}
+	// Populate particle parameters with restart data
+	int write_iter = 200; 	// Write every x number of iterations
+	int num_lines = (start_iter/write_iter + 1); // Number of lines to ignore when reading data
+
+	electron.np = 0;
+	ion.np = 0;
+
+	data.open("../Electron/Electrons"+to_string(mpi_rank)+".txt");
+	data.ignore(1e5,'\n');
+	int count = 0;
+	while (temp_data!=start_iter) {
+		data >> temp_data;
+		count++;
 	}
-
-	for (int i = 0; i < ion.np; ++i) {
-		ion.x[i] = ranf()*L_inner + x_bias;
-		ion.thermalVelocity(i);
-		ion.epsilon[i] = 0.5*ion.m*pow(getv(ion.vx[i], ion.vy[i],
-							ion.vz[i]),2.0)/ech;
-
-		if (ion.epsilon[i] > ion.max_epsilon) 
-		{ion.max_epsilon = ion.epsilon[i];}
-
+	cout << "Loading electron data into arrays" << endl;
+	while (temp_data==start_iter && !data.eof()) {
+		electron.np += 1;
+		data >> electron.x[electron.np-1];
+		data >> electron.vx[electron.np-1];
+		data >> electron.vy[electron.np-1];
+		data >> electron.vz[electron.np-1];
+		data >> electron.epsilon[electron.np-1];
+		if (electron.epsilon[electron.np-1] > electron.max_epsilon) {electron.max_epsilon = electron.epsilon[electron.np-1];}
+		data >> temp_data;
 	}
+	data.close();
+
+	cout << "Loading ion data into arrays" << endl;
+	data.open("../Ion/Ions"+to_string(mpi_rank)+".txt");
+	temp_data = 0;
+	data.ignore(1e5,'\n');
+	while (temp_data!=start_iter) {
+		data >> temp_data;
+	}
+	while (temp_data==start_iter && !data.eof()) {
+		ion.np += 1;
+		data >> ion.x[ion.np-1];
+		data >> ion.vx[ion.np-1];
+		data >> ion.vy[ion.np-1];
+		data >> ion.vz[ion.np-1];
+		data >> ion.epsilon[ion.np-1];
+		if (ion.epsilon[ion.np-1] > ion.max_epsilon) {ion.max_epsilon = ion.epsilon[ion.np-1];}
+		data >> temp_data;
+	}
+	data.close();
 
 	// Calculate collisions setup
 	double max_index, nu_max_en, nu_max_eex, nu_max_in, P_max;
@@ -350,11 +409,11 @@ int main(int argc, char **argv)
 	int stepwise_coll = 0;
 	//e-ex vars
 	double R10, R11, Rtmp1, atmp1, vtmp1, theta1;
-
+	double dn_tot;
 	auto start = steady_clock::now();
 	auto stop = steady_clock::now();
 	auto duration = duration_cast<microseconds>(stop-start);
-
+	
 	auto start_total = steady_clock::now();
 
 	//////////////////////////////////////////////////////////
@@ -363,56 +422,27 @@ int main(int argc, char **argv)
 	//
 	//////////////////////////////////////////////////////////
 	if(mpi_rank == 0) {cout << "Setting up output files" << endl;}
-	int write_iter = 200; 	// Write every x number of iterations
 	int write_restart = ts/5; 	// Write restart file every 20% of the simulation
 						// Make it so this is a multiple of write_iter 
 	int restart_opt = 1; 		// 0 to not write restart, 1 to write restart file
 	//int write_ss_iter = 25;	// Write steady state infor every x # of iterations
 	// New storage convention
-	ofstream InputFile("../Input.txt");
-	ofstream FieldCCFile("../FieldCCData.txt");
-	ofstream FieldNCFile("../FieldNCData.txt");
-	ofstream FieldAverageFile("../FieldAverageData.txt");
-	ofstream NumFile("../NumberPart.txt");
+	ofstream FieldCCFile("../FieldCCData.txt",ofstream::app);
+	ofstream FieldNCFile("../FieldNCData.txt",ofstream::app);
+	ofstream FieldAverageFile("../FieldAverageData.txt",ofstream::app);
+	ofstream NumFile("../NumberPart.txt",ofstream::app);
 
 	// MAKE ELECTRON AND ION FOLDERS IN SLURM FILE
-	ofstream ElectronFile("../Electron/Electrons"+to_string(mpi_rank)+".txt");
+	ofstream ElectronFile("../Electron/Electrons"+to_string(mpi_rank)+".txt",ofstream::app);
 	ofstream ElectronDiagFile("../Electron/ElectronDiagnostics.txt");
-	ofstream IonFile("../Ion/Ions"+to_string(mpi_rank)+".txt");
+	ofstream IonFile("../Ion/Ions"+to_string(mpi_rank)+".txt",ofstream::app);
 	ofstream IonDiagFile("../Ion/IonDiagnostics.txt");
 	ofstream IEDFFile("../Ion/IEDF"+to_string(mpi_rank)+".txt");
-	ofstream TimerFile("../Timer.txt");
-	 
-	InputFile << "Misc comments: Slurm job, 0.3 Pa, 2e6 Particles" << endl;
-	InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
-	InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / Steady State steps / dt / NumNodes / NumRanks" << endl;
-	InputFile << P << " " << total_init_part << " " << total_init_part << " " << electron.spwt;
-	InputFile << " " << ion.spwt << " " << V_hf << " " << V_lf << " " << f_hf;
-	InputFile << " " << f_lf << " " << ts << " " << ts_ss << " " <<	dt << " " << nn << " " << mpi_size << endl;
-
-	FieldAverageFile << "Iteration / Neutral Density / Excited Density / ";
-	FieldAverageFile << "Ion Density / Electron Density" << endl;
-
-	FieldCCFile << "Iteration / Time / Cell x / Charge Density / ";
-	FieldCCFile << "Electric Potential / Neutral Density / Excited Density / ";
-	FieldCCFile << "Ion Density / Electron Density"<< endl;
-
-	FieldNCFile << "Iteration / Time / Node x / Electric Field" << endl;
- 
-	if (restart_opt == 1) {
-		ElectronFile << "Iteration / x / vx / vy / vz / Epsilon " << endl;
-		IonFile << "Iteration / x / vx / vy / vz / Epsilon " << endl;
-	}
+	ofstream TimerFile("../Timer.txt",ofstream::app); 
 
 	ElectronDiagFile << "Cell x / n / ux / uy / uz / mean epsilon / T" << endl;
 	IonDiagFile << "Cell x / n / ux / uy / uz / mean epsilon / T" << endl;
 	IEDFFile << "Iter / x / vx / vy / vz / Epsilon" << endl;
-
-	NumFile << "Iteration / Electron np / Ion np / Electron Inner np / Ion Inner np / Total density (mass conservation)" << endl;
-
-	TimerFile << "Time in microseconds. Iter / Coll / Push1 / Fluid / Rho / Phi / E / Push2";
-	TimerFile << " / Total min elapsed "<< endl;
-
 	//////////////////////////////////////////////////////////////////////////////
 	//
 	//	
@@ -425,7 +455,7 @@ int main(int argc, char **argv)
 	//////////////////////////////////////////////////////////////////////////////
 
 	// Electrode Potential boundaries
-	t = 0.0;
+	t = start_iter*dt;
 	phi_left = V_hf*sin(2*M_PI*f_hf*t) + V_lf*sin(2*M_PI*f_lf*t);
 	// Reset variables
 	null_count = 0;
@@ -451,8 +481,7 @@ int main(int argc, char **argv)
 	// Get number densities
 	// Electrons
 	for (int p = 0; p < electron.np; ++p) {
-		get_WeightsCC(electron.x[p], weights, &electron.cell_index[p],
-				 elec_range, dx);
+		get_WeightsCC(electron.x[p], weights, &electron.cell_index[p], elec_range, dx);
 
 		electron.n[electron.cell_index[p]] += electron.spwt*weights[0];
 		electron.n[electron.cell_index[p]+1] += electron.spwt*weights[1];
@@ -460,8 +489,7 @@ int main(int argc, char **argv)
 	}
 	// Ions
 	for (int p = 0; p < ion.np; ++p) {
-		get_WeightsCC(ion.x[p], weights, &ion.cell_index[p], 
-			elec_range, dx);
+		get_WeightsCC(ion.x[p], weights, &ion.cell_index[p], elec_range, dx);
 		ion.n[ion.cell_index[p]] += ion.spwt*weights[0];
 		ion.n[ion.cell_index[p]+1] += ion.spwt*weights[1];
 	}
@@ -500,9 +528,9 @@ int main(int argc, char **argv)
 			b[i] = 1.0;
 			c[i] = 0.0;
 			if (i < elec_range[1]) {
-						RHS[i] = phi_left;
+				RHS[i] = phi_left;
 			} else {
-						RHS[i] = phi_right;
+				RHS[i] = phi_right;
 			}
 		}
 	}
@@ -560,75 +588,6 @@ int main(int argc, char **argv)
 		ion.E[p] = E_field[ion.node_index[p]]*weights[0] +
 				 E_field[ion.node_index[p] + 1]*weights[1];
 	}
-
-	////////////////////////////////////////////////////
-	//
-	// Output info
-	//
-	////////////////////////////////////////////////////
-
-	neutral.n_bar = 0.0;
-	excited.n_bar = 0.0;
-	ion.n_bar = 0.0;
-	electron.n_bar = 0.0;
-
-	for (int i = 0; i < electron.np; ++i) {
-		if (electron.x[i] > (0.25*L_inner+x_bias) && electron.x[i] < (x_ground-0.25*L_inner)) {
-			electron.inner_np += 1;
-		}
-	}
-
-	for (int i = 0; i < ion.np; ++i) {
-		if (ion.x[i] > (0.25*L_inner+x_bias) && ion.x[i] < (x_ground-0.25*L_inner)) {
-			ion.inner_np += 1;
-		}
-	}
-
-
-	// Energy density and flux density
-	for (int i = 0; i < n_cell; ++i) {
-		if (mpi_rank == 0) {
-			neutral.n_bar += neutral.n[i];
-			excited.n_bar += excited.n[i];
-			ion.n_bar += ion.n[i];
-			electron.n_bar += electron.n[i];
-
-			FieldCCFile << 0 << " " << t << " " << dx*(i+0.5) << " ";
-			FieldCCFile << rho[i] << " " << phi[i] << " " << neutral.n[i] << " ";
-			FieldCCFile << excited.n[i] << " " << ion.n[i] << " ";
-			FieldCCFile << electron.n[i] << endl;
-		}
-	}
-
-	if(mpi_rank == 0) {
-		for (int i = 0; i < nn; ++i) {
-			FieldNCFile << 0 << " " << t << " " << dx*i << " ";
-			FieldNCFile << E_field[i]	<< endl;
-		}
-	}
-			
-	neutral.n_bar /= elec_range[2] - elec_range[1];
-	excited.n_bar /= elec_range[2] - elec_range[1];
-	ion.n_bar /= elec_range[2] - elec_range[1];
-	electron.n_bar /= elec_range[2] - elec_range[1];
-			
-	MPI_Reduce(&electron.np, &electron.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&ion.np, &ion.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&electron.inner_np, &electron.inner_np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&ion.inner_np, &ion.inner_np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-	
-	double dn_tot = 0.0;
-	for(int i = 0; i < n_cell; ++i) {
-		dn_tot += ion.n[i] + neutral.n[i] + excited.n[i];
-	} 
-	dn_tot /= (double) (elec_range[2]-elec_range[1]);
-
-	if(mpi_rank == 0){
-		FieldAverageFile << 0	<< " " << neutral.n_bar << " " << excited.n_bar;
-		FieldAverageFile << " " << ion.n_bar << " " << electron.n_bar << endl;
-		NumFile << 0 << " " << electron.np_total << " " << ion.np_total << " ";
-		NumFile << electron.inner_np_total << " " << ion.inner_np_total << " " << dn_tot << endl;
-	}
 /////////////////////////////////////////////////////////////////////////////////////////////////	
 	//////////////////////////////////////////////////////////
 	//
@@ -640,7 +599,7 @@ int main(int argc, char **argv)
 	//
 	/////////////////////////////////////////////////////////
 	
-	for (int iter = 1; iter <= ts + ts_ss; ++iter) {
+	for (int iter = start_iter + 1; iter <= ts + ts_ss; ++iter) {
 		//////////////////////////////////////////////////
 		//
 		// Collision modules
