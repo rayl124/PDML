@@ -28,6 +28,7 @@ class particles {
     double *uy;		   // Bulk vy
     double *uz;		   // Bulk vz
     double *fieldT;
+    int *fieldnp;    
 
     double T;  // Temperature in K
     double m;  // Mass in kg
@@ -76,6 +77,7 @@ void particles::initialize(int max_part, int n_cell) {
   uy = new double[n_cell];
   uz = new double[n_cell];
   fieldT = new double[n_cell];
+  fieldnp = new int[n_cell];
 
   for (int i = 0; i < n_cell; ++i) {
     n_ss[i] = 0.0;
@@ -84,6 +86,7 @@ void particles::initialize(int max_part, int n_cell) {
     uy[i] = 0.0;
     uz[i] = 0.0;
     fieldT[i] = 0.0;
+    fieldnp[i] = 0.0;
   }
   gamma = new double[2]; 
 }
@@ -91,22 +94,22 @@ void particles::initialize(int max_part, int n_cell) {
 
 // Frees memory when simulation is done
 void particles::clean(void) {
-  delete(x);
-  delete(vx);
-  delete(vy);
-  delete(vz);
-  delete(epsilon);
-  delete(node_index);
-  delete(cell_index);
-  delete(n);
-  delete(n_ss);
-  delete(mean_epsilon);
-  delete(ux);
-  delete(uy);
-  delete(uz);
-  delete(fieldT);
-  delete(gamma);
-  delete(E);
+  delete[]x;
+  delete[]vx;
+  delete[]vy;
+  delete[]vz;
+  delete[]epsilon;
+  delete[]node_index;
+  delete[]cell_index;
+  delete[]n;
+  delete[]n_ss;
+  delete[]mean_epsilon;
+  delete[]ux;
+  delete[]uy;
+  delete[]uz;
+  delete[]fieldT;
+  delete[]gamma;
+  delete[]E;
 }
 
 // Removed a particle when it leaves the domain
@@ -185,18 +188,19 @@ void fluid::initialize(int n_cell) {
 
   for (int i = 0; i < n_cell; ++i) {
     n_ss[i] = 0.0;
+	n_dot = 0.0;
   }
 }
 
 void fluid::clean() {
-  delete(n);
-  delete(n_dot);
-  delete(f_coeff);
-  delete(T);
-  delete(v);
-  delete(beta);
-  delete(D);
-  delete(n_ss);
+  delete[]n;
+  delete[]n_dot;
+  delete[]f_coeff;
+  delete[]T;
+  delete[]v;
+  delete[]beta;
+  delete[]D;
+  delete[]n_ss;
 }
 
 double fluid::getMomentumCS(int index) {

@@ -72,7 +72,7 @@ void jacobi_Update(double *phi,
       cout << "Jacobi could not converge" << endl;
     }
   }
-  delete(phi_new);
+  delete[]phi_new;
 }
 
 // Solves a tridiagonal matrix
@@ -104,8 +104,8 @@ void triDiagSolver(double *phi,
     }
   }
 
-  delete(c_prime);
-  delete(d_prime);
+  delete[]c_prime;
+  delete[]d_prime;
 }
 
 // Solves dn/dt + d(-D dn/dx)/dx = n_dot
@@ -134,7 +134,7 @@ void driftDiffusionFVExplicit(double *u, double *RHS,
   
   copy_n(u_new, n_cell, u);
 
-  delete(u_new);
+  delete[]u_new;
 }
 
 // Solves dn/dt + d/dx(-D dn/dx) = ndot
@@ -191,7 +191,7 @@ void driftDiffusionFVExplicit2
 
   copy_n(u_new, n_cell, u);
 
-  delete(u_new);
+  delete[]u_new;
 
 
 }

@@ -160,8 +160,7 @@ void getNullCollPart(double *CS_energy,
   double v = sqrt(2.0*e*epsilon_max/m_source); 
 
   double g = v - v_target;
-  *P_max = getP(epsilon_max, sigma_total, m_source,
-			n_target, dt);
+  *P_max = getP(epsilon_max, sigma_total, m_source, n_target, dt);
   // Returned values
   *nu_max = g*sigma_total*n_target;
 
@@ -230,9 +229,9 @@ int getCollType(double *CS_energy,
   // if P_i < R < P_i+1, collision is type i, where tyoe N_coll is null
   search_index = searchIndex(R, P_vec, N_coll + 1);
   
-  delete(P_vec);
-  delete(sigma);
-  delete(nu);
+  delete[]P_vec;
+  delete[]sigma;
+  delete[]nu;
 
   return search_index;
 }
