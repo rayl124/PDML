@@ -31,27 +31,6 @@ using namespace std::chrono;
 //
 ////////////////////////////////////////////////////////////////////
 
-// Exclude zero and one, used for particle generation
-double ranf(void)
-{
-	double dtmp = 1.0;
-	while(dtmp>=1.0 || dtmp <= 0.0) {
-		dtmp = ((double)rand())/((double)RAND_MAX);
-	}
-	return dtmp;
-}
-
-// Exclude 1
-// Used for particle sample
-double ranf0(void)
-{ 
-	double dtmp = 1.0;
-	while(dtmp>=1.0 || dtmp < 0.0) {
-		dtmp = ((double)rand())/((double)RAND_MAX);
-	}
-	return dtmp;
-}
-
 // Node centered weights
 void get_WeightsNC(double part_x,
 		 double *weights,
@@ -169,12 +148,13 @@ int main(int argc, char **argv)
 
 	// Time
 	// Timesteps per HF * Cycles HF per LF * # LF
-	int ts_hf = 200;
-	int n_cycle = 120;
-	int n_cycle_ss = 5;
-	int hf_2_lf = 100; // Cycles HF per LF
-	int ts = ts_hf*hf_2_lf*n_cycle; // # of time steps for main simulation
-	int ts_ss = ts_hf*hf_2_lf*n_cycle_ss;			// # of steady state time steps for bulk analysis
+	int ts_hf 		= 200;
+	int n_cycle 	= 120;
+	int n_cycle_ss 	= 5;
+	int hf_2_lf 	= 100; // Cycles HF per LF
+	int ts_lf 		= ts_hf*hf_2_lf; // Timsteps per LF
+	int ts 			= ts_lf*n_cycle; // # of time steps for main simulation
+	int ts_ss 		= ts_lf*n_cycle_ss;	// # of steady state time steps for bulk analysis
 	double dt = 1.0/(f_hf*((double)ts_hf)); 
 
 	//////////////////////////////////////////////////////////////
@@ -214,8 +194,11 @@ int main(int argc, char **argv)
 	}
 
 	coll_data.close();
-
-
+	// Rates for the first 8 reactions, take the time averag
+	double *reaction_rates = new double[8 * n_cell];
+	for (int i = 0; i < 8*n_cell; ++i) {
+		reaction_rates[i] = 0.0;
+	}
 	///////////////////////////////////////////////////////////////
 	//
 	// Particle variables
@@ -239,7 +222,7 @@ int main(int argc, char **argv)
 	electron.T = 300.0; //[K]
 	electron.spwt = real_part/((double)total_init_part);
 	electron.gamma[0] = 0.0;
-	electron.max_epsilon = 0.0;
+	electron.max_epsilon = 100.0; 
 
 	// Ion particle data
 	particles ion;
@@ -250,7 +233,7 @@ int main(int argc, char **argv)
 	ion.T = 300.0; //[K]
 	ion.spwt = real_part/((double)total_init_part);
 	ion.gamma[1] = 0.15;
-	ion.max_epsilon = 0.0;
+	ion.max_epsilon = 450.0;
 
 	// Uniformly distribute initial positions, assign initial velocity from
 	// thermal distribution
@@ -286,7 +269,10 @@ int main(int argc, char **argv)
 	int rand_index, type, null_count, elastic_count;
 	double epsilon_exc, epsilon_ion;
 
-
+	int SEE_count_total_global = 0;
+	int SEE_count_global = 0;
+	int SEE_count_total = 0;
+	int SEE_count = 0;
 	/////////////////////////////////////////////////////////
 	// 
 	// Field variables
@@ -294,6 +280,12 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////////////////////
 	if(mpi_rank == 0){cout<<"Initializing field data" <<endl;}
 	double R; // General random number variable
+	int C_factor = ts_lf; // Run fluid solver every C PIC time steps
+	int alpha = 50;
+	double rate_dt = (double) C_factor*dt;
+	double fluid_dt = (double) alpha*rate_dt; 
+	double VN_dt;	
+
 	fluid neutral;
 	neutral.m = 39.948*AMU;
 	neutral.initialize(n_cell);
@@ -352,6 +344,17 @@ int main(int argc, char **argv)
 	//e-ex vars
 	double R10, R11, Rtmp1, atmp1, vtmp1, theta1;
 
+	// Cross section values
+	double k_en, k_eex, k_in; // k = sigma_t*g, found through cross-section data
+	k_en = getSigmaTgMax(CS_energy, e_n_CS, electron.m, N_coll[0], data_set_length);	
+	k_eex = getSigmaTgMax(CS_energy, e_ex_CS, electron.m, N_coll[1], data_set_length);
+	k_in = getSigmaTgMax(CS_energy, i_n_CS, ion.m, N_coll[2], data_set_length);
+	//cout << k_en << " " << k_eex << " " << k_in << endl;
+	//double sigma_t_en, sigma_t_eex, sigma_t_in;
+	//sigma_t_en = getSigmaTMax(e_n_CS, N_coll[0], data_set_length);
+	//sigma_t_eex = getSigmaTMax(e_ex_CS, N_coll[1], data_set_length);
+	//sigma_t_in = getSigmaTMax(i_n_CS, N_coll[2], data_set_length);	
+	
 	auto start = steady_clock::now();
 	auto stop = steady_clock::now();
 	auto duration = duration_cast<microseconds>(stop-start);
@@ -383,13 +386,15 @@ int main(int argc, char **argv)
 	ofstream IonDiagFile("../Ion/IonDiagnostics.txt");
 	ofstream IEDFFile("../Ion/IEDF"+to_string(mpi_rank)+".txt");
 	ofstream TimerFile("../Timer.txt");
-	 
-	InputFile << "Misc comments: Slurm job, 0.3 Pa, 2e6 Particles" << endl;
+	ofstream ReactionRateFile("../ReactionRates.txt");	 
+
+	InputFile << "Misc comments: Isotropic e-n" << endl;
 	InputFile << "Pressure [Pa] / electron.np / ion.np / electron.spwt / ion.spwt / ";
-	InputFile << "V_hf / V_lf / f_hf / f_lf / Total steps / Steady State steps / dt / NumNodes / NumRanks" << endl;
+	InputFile << "V_hf / V_lf / f_hf / f_lf / Total Main steps / Steady State steps / dt / NumNodes / C_factor / alpha / NumRanks" << endl;
 	InputFile << P << " " << total_init_part << " " << total_init_part << " " << electron.spwt;
 	InputFile << " " << ion.spwt << " " << V_hf << " " << V_lf << " " << f_hf;
-	InputFile << " " << f_lf << " " << ts << " " << ts_ss << " " <<	dt << " " << nn << " " << mpi_size << endl;
+	InputFile << " " << f_lf << " " << ts << " " << ts_ss << " " <<	dt << " " << nn << " ";
+	InputFile << C_factor << " " << alpha << " " << mpi_size << endl;
 
 	FieldAverageFile << "Iteration / Neutral Density / Excited Density / ";
 	FieldAverageFile << "Ion Density / Electron Density" << endl;
@@ -427,7 +432,7 @@ int main(int argc, char **argv)
 
 	// Electrode Potential boundaries
 	t = 0.0;
-	phi_left = V_hf*sin(2*M_PI*f_hf*t) + V_lf*sin(2*M_PI*f_lf*t);
+	phi_left = V_hf*sin(2.0*M_PI*f_hf*t) + V_lf*sin(2.0*M_PI*f_lf*t);
 	// Reset variables
 	null_count = 0;
 	elastic_count = 0;
@@ -479,7 +484,7 @@ int main(int argc, char **argv)
 	MPI_Allreduce(MPI_IN_PLACE, electron.n, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	MPI_Allreduce(MPI_IN_PLACE, ion.n, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); 
 	MPI_Allreduce(MPI_IN_PLACE, rho, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
+	
 	//////////////////////////////////////////////////
 	//
 	// Compute electric potential
@@ -622,6 +627,7 @@ int main(int argc, char **argv)
 	for(int i = 0; i < n_cell; ++i) {
 		dn_tot += ion.n[i] + neutral.n[i] + excited.n[i];
 	} 
+	double const n_tot_domain = dn_tot;
 	dn_tot /= (double) (elec_range[2]-elec_range[1]);
 
 	if(mpi_rank == 0){
@@ -649,17 +655,25 @@ int main(int argc, char **argv)
 		//////////////////////////////////////////////////
 
 		if(mpi_rank==0){cout << "Iter: " << iter << endl;}
-
+	
+		double N_c_tmp;
 		start = steady_clock::now();
 
 		//for (int i = 0; i < n_cell; ++i) {
 		// Get number of particles for electron - neutral collisions
 		if (electron.np > 0) {
-			getNullCollPart(CS_energy, e_n_CS, electron.max_epsilon, 0.0,
+			/*getNullCollPart(sigma_t_en, e_n_CS, electron.max_epsilon, 0.0,
 							&nu_max_en, &P_max, &N_c_en,
 							electron.m, neutral.getMax_n(n_cell), 
 							dt, electron.np, 
-							N_coll[0], data_set_length);
+							N_coll[0], data_set_length);*/
+			nu_max_en = k_en*neutral.getMax_n(n_cell);
+			P_max = 1.0-exp(-dt*nu_max_en);
+			N_c_tmp = (double)electron.np*P_max;
+			N_c_en = floor(N_c_tmp);
+			R = (double)(rand())/((double) RAND_MAX);
+			if (R < (N_c_tmp - N_c_en)) {++N_c_en;}
+
 		} else {
 			nu_max_en = 0.0;
 			N_c_en = 0;
@@ -667,11 +681,19 @@ int main(int argc, char **argv)
 		
 		// Electron-excited
 		if (electron.np > 0) {
-			getNullCollPart(CS_energy, e_ex_CS, electron.max_epsilon, 0.0,
+			/*getNullCollPart(sigma_t_eex, e_ex_CS, electron.max_epsilon, 0.0,
 							&nu_max_eex, &P_max, &N_c_eex,
 							electron.m, excited.getMax_n(n_cell), 
 							dt, electron.np,
 							N_coll[1], data_set_length);
+			*/
+			nu_max_eex = k_eex*excited.getMax_n(n_cell);
+			P_max = 1.0-exp(-dt*nu_max_eex);
+			N_c_tmp = (double)electron.np*P_max;
+			N_c_eex = floor(N_c_tmp);
+			R = (double)(rand())/((double) RAND_MAX);
+			if (R < (N_c_tmp - N_c_eex)) {++N_c_eex;}
+
 		} else {
 			nu_max_eex = 0.0;
 			N_c_eex = 0;
@@ -681,19 +703,27 @@ int main(int argc, char **argv)
 		// Assume neutral at thermal velocity is comparable to ions,
 		// max_relative_velocity = max_ion_velocity + v_th_ion
 		if (ion.np > 0) {
-			getNullCollPart(CS_energy, i_n_CS, ion.max_epsilon, 
+			/*getNullCollPart(sigma_t_in, i_n_CS, ion.max_epsilon, 
 					-sqrt(2.0*k_B*ion.T/ion.m),
 					&nu_max_in, &P_max, &N_c_in,
 					ion.m, neutral.getMax_n(n_cell), 
 					dt, ion.np, 
 					N_coll[2], data_set_length);
+			*/
+			
+			nu_max_in = k_in*neutral.getMax_n(n_cell);
+			P_max = 1.0-exp(-dt*nu_max_in);
+			N_c_tmp = (double)ion.np*P_max;
+			N_c_in = floor(N_c_tmp);
+			R = (double)(rand())/((double) RAND_MAX);
+			if (R < (N_c_tmp - N_c_in)) {++N_c_in;}
 		} else {
 			nu_max_in = 0.0;
 			N_c_in = 0;
 		} 
 
 		if(mpi_rank==0){cout << "Calculating electron-neutral collisions..." << endl;}
-		//cout << N_c_en << " " << electron.max_epsilon << endl;
+		//cout << N_c_en << " " << N_c_eex << " " << N_c_in << " " << electron.max_epsilon << " " << ion.max_epsilon << endl;
 
 		for (int i = 0; i < N_c_en; ++i) {
 			rand_index = floor(ranf0()*(electron.np));
@@ -704,10 +734,11 @@ int main(int argc, char **argv)
 					return -1;
 			}
 			// Use the neutral density of the cell that the randomly chose particle is in
-			type = getCollType(CS_energy, e_n_CS, electron.epsilon[rand_index], 
+			type = getCollType(CS_energy, e_n_CS, electron.vx[rand_index],
+				electron.vy[rand_index], electron.vz[rand_index], 0.0, 0.0, 0.0, 
 				nu_max_en, electron.m, neutral.n[electron.node_index[rand_index]],
 				N_coll[0], data_set_length);
-			
+			if(type == -1) {cout << "en collision" << endl; return -1;}		
 			double elec_prev = electron.epsilon[rand_index];
 			double elec_vx_prev = electron.vx[rand_index];
 			double elec_vy_prev = electron.vy[rand_index];
@@ -725,6 +756,9 @@ int main(int argc, char **argv)
 					e_elastic(&electron.vx[rand_index], &electron.vy[rand_index],
 							&electron.vz[rand_index], electron.epsilon[rand_index],
 							electron.m, neutral.m);
+					
+					//isotropic_e_elastic(&electron.vx[rand_index], &electron.vy[rand_index], &electron.vz[rand_index]);
+					
 					electron.epsilon[rand_index] = 0.5*electron.m*
 							pow(getv(electron.vx[rand_index], electron.vy[rand_index], 
 							electron.vz[rand_index]),2.0)/ech;
@@ -736,6 +770,14 @@ int main(int argc, char **argv)
 						cout << electron.vx[rand_index] << " " << electron.vy[rand_index]<< " " << electron.vz[rand_index] << endl;
 						return -1;
 					}			
+
+					get_WeightsCC(electron.x[rand_index], weights, &electron.cell_index[rand_index], elec_range, dx);
+					
+					// Update steady state reaction rates
+					if (iter > ts) {
+						reaction_rates[0*n_cell + electron.cell_index[rand_index]] += electron.spwt*weights[0]/(dx*dt);
+						reaction_rates[0*n_cell + electron.cell_index[rand_index] + 1] += electron.spwt*weights[1]/(dx*dt);
+					}
 
 					continue;
 				case 1:
@@ -754,16 +796,22 @@ int main(int argc, char **argv)
 
 
 					// Update n_dot
-					get_WeightsCC(electron.x[rand_index], weights, 
-						&electron.cell_index[rand_index], elec_range, dx);
+					get_WeightsCC(electron.x[rand_index], weights, &electron.cell_index[rand_index], elec_range, dx);
 					neutral.n_dot[electron.cell_index[rand_index]] -= 
-						electron.spwt*weights[0]/(dx*dt);
+						electron.spwt*weights[0]/(dx*rate_dt);
 					neutral.n_dot[electron.cell_index[rand_index] + 1] -=
-						electron.spwt*weights[1]/(dx*dt);
+						electron.spwt*weights[1]/(dx*rate_dt);
 					excited.n_dot[electron.cell_index[rand_index]] += 
-						electron.spwt*weights[0]/(dx*dt);
+						electron.spwt*weights[0]/(dx*rate_dt);
 					excited.n_dot[electron.cell_index[rand_index] + 1] +=
-						electron.spwt*weights[1]/(dx*dt);
+						electron.spwt*weights[1]/(dx*rate_dt);
+					
+					// Update steady state reaction rates
+					if (iter > ts) {
+						reaction_rates[1*n_cell + electron.cell_index[rand_index]] += electron.spwt*weights[0]/(dx*dt);
+						reaction_rates[1*n_cell + electron.cell_index[rand_index] + 1] += electron.spwt*weights[1]/(dx*dt);
+					}
+
 					continue;
 				case 2:
 					epsilon_exc = 1.30940e1; // From crtrs.dat.txt
@@ -784,13 +832,19 @@ int main(int argc, char **argv)
 					get_WeightsCC(electron.x[rand_index], weights, 
 						&electron.cell_index[rand_index], elec_range, dx);
 					neutral.n_dot[electron.cell_index[rand_index]] -= 
-						electron.spwt*weights[0]/(dx*dt);
+						electron.spwt*weights[0]/(dx*rate_dt);
 					neutral.n_dot[electron.cell_index[rand_index] + 1] -=
-						electron.spwt*weights[1]/(dx*dt);
+						electron.spwt*weights[1]/(dx*rate_dt);
 					excited.n_dot[electron.cell_index[rand_index]] += 
-						electron.spwt*weights[0]/(dx*dt);
+						electron.spwt*weights[0]/(dx*rate_dt);
 					excited.n_dot[electron.cell_index[rand_index] + 1] +=
-						electron.spwt*weights[1]/(dx*dt);
+						electron.spwt*weights[1]/(dx*rate_dt);
+
+					// Update steady state reaction rates
+					if (iter > ts) {
+						reaction_rates[2*n_cell + electron.cell_index[rand_index]] += electron.spwt*weights[0]/(dx*dt);
+						reaction_rates[2*n_cell + electron.cell_index[rand_index] + 1] += electron.spwt*weights[1]/(dx*dt);
+					}
 
 					continue;
 				case 3:
@@ -834,10 +888,17 @@ int main(int argc, char **argv)
 					get_WeightsCC(electron.x[rand_index], weights, 
 						&electron.cell_index[rand_index], elec_range, dx);
 					neutral.n_dot[electron.cell_index[rand_index]] -= 
-						electron.spwt*weights[0]/(dt*dx);
+						electron.spwt*weights[0]/(rate_dt*dx);
 					neutral.n_dot[electron.cell_index[rand_index] + 1] -=
-						electron.spwt*weights[1]/(dt*dx);
-					continue;	
+						electron.spwt*weights[1]/(rate_dt*dx);
+
+					// Update steady state reaction rates
+					if (iter > ts) {
+						reaction_rates[3*n_cell + electron.cell_index[rand_index]] += electron.spwt*weights[0]/(dx*dt);
+						reaction_rates[3*n_cell + electron.cell_index[rand_index] + 1] += electron.spwt*weights[1]/(dx*dt);
+					}
+					continue;
+				
 				case 4:
 					null_count += 1;
 					continue;
@@ -855,13 +916,15 @@ int main(int argc, char **argv)
 			rand_index = floor(ranf0()*(electron.np));
 			if(rand_index == electron.np) {rand_index--;}
 			
-			type = getCollType(CS_energy, e_ex_CS, electron.epsilon[rand_index],
+			type = getCollType(CS_energy, e_ex_CS, electron.vx[rand_index],
+				electron.vy[rand_index], electron.vz[rand_index], 0.0, 0.0, 0.0,
 				nu_max_eex, electron.m, excited.n[electron.node_index[rand_index]],
 				N_coll[1], data_set_length);
 
+			if(type == -1) {cout << "eex collision" << endl; return -1;}		
 			// switch-case for electron-excited collisions
 			// 0 - Step Ionization
-			/// 1 - Superelastic (De-excitation)
+			// 1 - Superelastic (De-excitation)
 			// 2 - null
 			switch(type) {
 				case 0:
@@ -901,10 +964,17 @@ int main(int argc, char **argv)
 					get_WeightsCC(electron.x[rand_index], weights, 
 							&electron.cell_index[rand_index], elec_range, dx);
 					excited.n_dot[electron.cell_index[rand_index]] -= 
-						electron.spwt*weights[0]/(dx*dt);
+						electron.spwt*weights[0]/(dx*rate_dt);
 					excited.n_dot[electron.cell_index[rand_index] + 1] -=
-						electron.spwt*weights[1]/(dx*dt);
+						electron.spwt*weights[1]/(dx*rate_dt);
 					stepwise_coll += 1;
+
+					// Update steady state reaction rates
+					if (iter > ts) {
+						reaction_rates[4*n_cell + electron.cell_index[rand_index]] += electron.spwt*weights[0]/(dx*dt);
+						reaction_rates[4*n_cell + electron.cell_index[rand_index] + 1] += electron.spwt*weights[1]/(dx*dt);
+					}
+
 					continue;
 				case 1:
 					// Add excitation energy to the electron and isotropically scatter
@@ -927,13 +997,21 @@ int main(int argc, char **argv)
 					get_WeightsCC(electron.x[rand_index], weights, 
 							&electron.cell_index[rand_index], elec_range, dx);
 					excited.n_dot[electron.cell_index[rand_index]] -= 
-							electron.spwt*weights[0]/(dx*dt);
+							electron.spwt*weights[0]/(dx*rate_dt);
 					excited.n_dot[electron.cell_index[rand_index] + 1] -=
-							electron.spwt*weights[1]/(dx*dt);
+							electron.spwt*weights[1]/(dx*rate_dt);
 					neutral.n_dot[electron.cell_index[rand_index]] += 
-							electron.spwt*weights[0]/(dx*dt);
+							electron.spwt*weights[0]/(dx*rate_dt);
 					neutral.n_dot[electron.cell_index[rand_index] + 1] +=
-							electron.spwt*weights[1]/(dx*dt);
+							electron.spwt*weights[1]/(dx*rate_dt);
+
+
+					// Update steady state reaction rates
+					if (iter > ts) {
+						reaction_rates[5*n_cell + electron.cell_index[rand_index]] += electron.spwt*weights[0]/(dx*dt);
+						reaction_rates[5*n_cell + electron.cell_index[rand_index] + 1] += electron.spwt*weights[1]/(dx*dt);
+					}
+	
 					continue;
 				case 2:
 					null_count += 1;
@@ -951,9 +1029,15 @@ int main(int argc, char **argv)
 		for (int i = 0; i < N_c_in; ++i) {
 			rand_index = floor(ranf0()*(ion.np));
 			if(rand_index == ion.np) {rand_index--;}
-			type = getCollType(CS_energy, i_n_CS, ion.epsilon[rand_index],
-				nu_max_in, ion.m, neutral.n[ion.node_index[rand_index]],
-				N_coll[2], data_set_length);
+
+			double neutral_vx, neutral_vy, neutral_vz;
+			thermalVelSample(&neutral_vx, &neutral_vy, &neutral_vz, ion.T, ion.m);
+
+			type = getCollType(CS_energy, i_n_CS, ion.vx[rand_index], ion.vy[rand_index], 
+					ion.vz[rand_index], neutral_vx, neutral_vy, neutral_vz,
+					nu_max_in, ion.m, neutral.n[ion.node_index[rand_index]],
+					N_coll[2], data_set_length);
+			
 			// switch-case for electron-neutral collisions
 			// 0 - isotropic
 			// 1 - charge exchange
@@ -961,29 +1045,38 @@ int main(int argc, char **argv)
 			switch(type) {
 				case 0:
 					elastic_count += 1;
-					get_WeightsCC(electron.x[rand_index], weights, 
-							&electron.cell_index[rand_index], elec_range, dx);
+					get_WeightsCC(ion.x[rand_index], weights, 
+							&ion.cell_index[rand_index], elec_range, dx);
 	
-					T_n = neutral.T[electron.cell_index[rand_index]]*weights[0] +
-							 neutral.T[electron.cell_index[rand_index] + 1]*weights[1];
+					T_n = neutral.T[ion.cell_index[rand_index]]*weights[0] +
+						  neutral.T[ion.cell_index[rand_index] + 1]*weights[1];
 
 					i_scattering(&ion.vx[rand_index], &ion.vy[rand_index],
-							 &ion.vz[rand_index], ion.epsilon[rand_index],
+							 &ion.vz[rand_index], neutral_vx, neutral_vy, neutral_vz, ion.epsilon[rand_index],
 							 ion.m, ion.m, T_n);
 					ion.epsilon[rand_index] = 0.5*ion.m*pow(getv(ion.vx[rand_index], 
 					ion.vy[rand_index], ion.vz[rand_index]),2.0)/ech; //[eV]
+
+					// Update steady state reaction rates
+					if (iter > ts) {
+						reaction_rates[6*n_cell + ion.cell_index[rand_index]] += ion.spwt*weights[0]/(dx*dt);
+						reaction_rates[6*n_cell + ion.cell_index[rand_index] + 1] += ion.spwt*weights[1]/(dx*dt);
+					}
 					continue;
 				case 1:
-					get_WeightsCC(electron.x[rand_index], weights, 
-						&electron.cell_index[rand_index], elec_range, dx);
-
-					T_n = neutral.T[electron.cell_index[rand_index]]*weights[0] +
-						 neutral.T[electron.cell_index[rand_index] + 1]*weights[1];
-
-					thermalVelSample(&ion.vx[rand_index], &ion.vy[rand_index],
-						&ion.vz[rand_index], T_n, neutral.m);
+					//ion.thermalVelocity(rand_index);
+					ion.vx[rand_index] = neutral_vx;
+					ion.vy[rand_index] = neutral_vy;
+					ion.vz[rand_index] = neutral_vz;
 					ion.epsilon[rand_index] = 0.5*ion.m*pow(getv(ion.vx[rand_index], 
-					ion.vy[rand_index], ion.vz[rand_index]),2.0)/ech; //[eV]
+											ion.vy[rand_index], ion.vz[rand_index]),2.0)/ech; //[eV]
+
+					get_WeightsCC(ion.x[rand_index], weights, 
+							&ion.cell_index[rand_index], elec_range, dx);
+					if (iter > ts) {
+						reaction_rates[7*n_cell + ion.cell_index[rand_index]] += ion.spwt*weights[0]/(dx*dt);
+						reaction_rates[7*n_cell + ion.cell_index[rand_index] + 1] += ion.spwt*weights[1]/(dx*dt);
+					}
 					continue;
 				case 2:
 					null_count += 1;
@@ -999,6 +1092,7 @@ int main(int argc, char **argv)
 			double new_ion_double = penning_rate*dx*dt/ion.spwt;
 			int new_ion = floor(penning_rate*dx*dt/ion.spwt); // Ions formed [macro part]
 			double d_frac_ion = new_ion_double - new_ion;
+
 
 			R = ranf();
 			if (R < d_frac_ion) {new_ion++;}
@@ -1032,8 +1126,14 @@ int main(int argc, char **argv)
 				electron.epsilon[electron.np-1] = 0.5*electron.m*pow(getv(electron.vx[electron.np-1], 
 						electron.vy[electron.np-1], electron.vz[electron.np-1]),2.0)/ech;
 			}
-			neutral.n_dot[i] += penning_rate; // Increase in density
-			excited.n_dot[i] -= 2.0*penning_rate; // Decrease in density
+			double n_dot_tmp = electron.spwt/(dx*rate_dt);
+			neutral.n_dot[i] += n_dot_tmp*((double) new_ion);
+			excited.n_dot[i] -= 2.0*n_dot_tmp*((double) new_ion);
+			/*
+			if (iter%C_factor == 0) {
+				neutral.n_dot[i] += penning_rate; // Increase in density
+				excited.n_dot[i] -= 2.0*penning_rate; // Decrease in density
+			}*/
 		}
 		stop = steady_clock::now();
 		duration = duration_cast<microseconds>(stop-start);
@@ -1047,7 +1147,7 @@ int main(int argc, char **argv)
 
 		// Electrode Potential boundaries
 		t = iter*dt;
-		phi_left = V_hf*sin(2*M_PI*f_hf*t) + V_lf*sin(2*M_PI*f_lf*t);
+		phi_left = V_hf*sin(2.0*M_PI*f_hf*t) + V_lf*sin(2.0*M_PI*f_lf*t);
 		// Reset variables
 		electron.max_epsilon = 0.0;
 		ion.max_epsilon = 0.0;
@@ -1083,8 +1183,8 @@ int main(int argc, char **argv)
 			if (electron.x[p] <= x_bias ||
 				electron.x[p] >= x_ground) {
 				// Absorption
-				if (electron.x[p] <= x_bias) {electron.flux_L -= electron.spwt/dt;}
-				else {electron.flux_R += electron.spwt/dt;}
+				if (electron.x[p] <= x_bias) {electron.flux_L -= electron.spwt/rate_dt;}
+				else {electron.flux_R += electron.spwt/rate_dt;}
 				electron.remove_part(p);
 			 	--p; 
 			}
@@ -1110,14 +1210,16 @@ int main(int argc, char **argv)
 			// Electron emit or absorption
 			if (ion.x[p] <= x_bias ||
 				ion.x[p] >= x_ground) {
-
+				
+				SEE_count_total += 1;
 				R = ranf();
 
 				// Inject electron at thermal velocity
 				if (R < ion.gamma[1]) {
 					electron.np += 1;
+					SEE_count += 1;
 					electron.injectionVelocity(electron.np-1);
-
+					cout << "Injected velocity: " << electron.vx[electron.np-1] << endl;
 					if (ion.x[p] <= x_bias) {
 						// Time after ion collides at wall
 						time_coll = (ion.x[p] - x_bias)/ion.vx[p];
@@ -1138,14 +1240,14 @@ int main(int argc, char **argv)
 
 				// AR+ flux, it is subtracted in the fluid solver
 				if (ion.x[p] <= x_bias) {
-					ion.flux_L -= ion.spwt/(dt);
+					ion.flux_L -= ion.spwt/(rate_dt);
 					if (iter > ts) {
 						x_old = ion.x[p] - dt*ion.vx[p];
 						IEDFFile << iter << " " << x_old << " " << ion.vx[p] << " " << ion.vy[p] << " ";
 						IEDFFile << ion.vz[p] << " " << ion.epsilon[p] << endl;
 					}
 				} else {
-					ion.flux_R += ion.spwt/(dt);
+					ion.flux_R += ion.spwt/(rate_dt);
 					if (iter > ts) {
 						x_old = ion.x[p] - dt*ion.vx[p];
 						IEDFFile << iter << " " << x_old << " " << ion.vx[p] << " " << ion.vy[p] << " ";
@@ -1177,76 +1279,85 @@ int main(int argc, char **argv)
 		if(mpi_rank==0){cout << "Computing fluid density" << endl;}
 		start = steady_clock::now();
 
-		double n_tot;
-		double von_neumann;
-		int C_factor = 2; // Run fluid solver ever C PIC time steps
-		double fluid_dt = C_factor*dt;
-
-
 		if (iter%(C_factor) == 0) {
+			double n_tot_cell, n_tot_domain_prime, mass_change, N_accel;
+			//Set von Neumann number
+			double VN = 0.48;
+			//C_factor in inputs
 
 			// Get densities for fluids
 			// ion.n[i] should already be reduced
 			// Gather n_dot from collisions
 			MPI_Allreduce(MPI_IN_PLACE, excited.n_dot, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 			MPI_Allreduce(MPI_IN_PLACE, neutral.n_dot, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
+			double D_max = 0.0;
 			for (int i = 0; i < n_cell; ++i) {
 				if (i >= elec_range[1] && i < elec_range[2]) {
-					n_tot =	neutral.n[i] + excited.n[i] + ion.n[i];
-					neutral.D[i] = 3.0*sqrt(k_B*neutral.T[i]) /
-						(8.0*sqrt(M_PI*neutral.m)*d_LJ*d_LJ*1.0e-20*n_tot);
-					excited.D[i] = 3.0*sqrt(k_B*excited.T[i]) /
-						(8.0*sqrt(M_PI*excited.m)*d_LJ*d_LJ*1.0e-20*n_tot);
-					von_neumann = neutral.D[i]*fluid_dt/(dx*dx);
-					cout << von_neumann << endl;
+					n_tot_cell 		= neutral.n[i] + excited.n[i] + ion.n[i];
+					neutral.D[i] 	= 3.0*sqrt(k_B*neutral.T[i]) /
+									(8.0*sqrt(M_PI*neutral.m)*d_LJ*d_LJ*1.0e-20*n_tot_cell);
+					excited.D[i] 	= 3.0*sqrt(k_B*excited.T[i]) /
+									(8.0*sqrt(M_PI*excited.m)*d_LJ*d_LJ*1.0e-20*n_tot_cell);
 				} else {
 					neutral.D[i] = 0.0;
 					excited.D[i] = 0.0;
 				}
+				if (neutral.D[i] > D_max) {D_max = neutral.D[i];}
+				if (excited.D[i] > D_max) {D_max = excited.D[i];}
 			}
-			driftDiffusionFVExplicit2(&excited.n[elec_range[1]], 
-									&excited.n_dot[elec_range[1]],
-		 							&excited.D[elec_range[1]],
-									0.0, 0.0, dx, fluid_dt, elec_range[2]-elec_range[1],
-									&excited.flux_L, &excited.flux_R);
-
-			double n_ghostL = neutral.n[elec_range[1]];
-			double n_ghostR = neutral.n[elec_range[2]-1];
-
-			driftDiffusionFVExplicit2(&neutral.n[elec_range[1]],
-							&neutral.n_dot[elec_range[1]], 
-							&neutral.D[elec_range[1]],
-							n_ghostL, n_ghostR, 
-							dx, fluid_dt, elec_range[2]-elec_range[1],
-							&neutral.flux_L, &neutral.flux_R);
-
-			neutral.n[elec_range[1]] += -dt/dx*excited.flux_L;
-			neutral.n[elec_range[2]-1] += dt/dx*excited.flux_R;
-
+			// CHange time step to fit VN stability
+			VN_dt = dx*dx*VN/D_max;
+			// Get ratio of fluid time steps to VN time steps
+			// Round up so VN < 0.5
+			int N_steps = ceil(fluid_dt/VN_dt);
+			// Recalculate VN_dt
+			VN_dt = fluid_dt/((double) N_steps);
+			//cout << "Von Neumman = " << VN_dt*D_max/(dx*dx) << endl;
+			
 			// Gather the fluxes from all the ranks
 			MPI_Allreduce(MPI_IN_PLACE, &electron.flux_L, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 			MPI_Allreduce(MPI_IN_PLACE, &electron.flux_R, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 			MPI_Allreduce(MPI_IN_PLACE, &ion.flux_L, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 			MPI_Allreduce(MPI_IN_PLACE, &ion.flux_R, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+			for (int step = 0; step < N_steps; ++step) {
+				driftDiffusionFVExplicit2(&excited.n[elec_range[1]], 
+										&excited.n_dot[elec_range[1]],
+		 								&excited.D[elec_range[1]],
+										0.0, 0.0, dx, VN_dt, elec_range[2]-elec_range[1],
+										&excited.flux_L, &excited.flux_R);
 
-			neutral.n[elec_range[1]] += -dt/dx*ion.flux_L;
-			neutral.n[elec_range[2]-1] += dt/dx*ion.flux_R;
+				double n_ghostL = neutral.n[elec_range[1]];
+				double n_ghostR = neutral.n[elec_range[2]-1];
 
-			while(abs(neutral.flux_L) > 1e-5 || abs(neutral.flux_R) > 1e-5) {
-				cout << "Error: We have set Neumann" << endl;
-				return -1; 
-			}
-			while (excited.flux_L > esmall || excited.flux_R < -esmall) {
-				cout << "Error: Excited is generated" << endl;
-				return -1;
-			}
-			while (ion.flux_L > esmall || ion.flux_R < -esmall) {
-				cout << "Error: Ion is generated" << endl;
-				return -1;
-			}
+				driftDiffusionFVExplicit2(&neutral.n[elec_range[1]],
+										&neutral.n_dot[elec_range[1]], 
+										&neutral.D[elec_range[1]],
+										n_ghostL, n_ghostR, 
+										dx, VN_dt, elec_range[2]-elec_range[1],
+										&neutral.flux_L, &neutral.flux_R);
 
-			// Reset boundaries
+				neutral.n[elec_range[1]] += -VN_dt/dx*excited.flux_L;
+				neutral.n[elec_range[2]-1] += VN_dt/dx*excited.flux_R;
+
+				neutral.n[elec_range[1]] += -VN_dt/dx*ion.flux_L;
+				neutral.n[elec_range[2]-1] += VN_dt/dx*ion.flux_R;
+
+				while(abs(neutral.flux_L) > 1e-5 || abs(neutral.flux_R) > 1e-5) {
+					cout << "Error: We have set Neumann" << endl;
+					return -1; 
+				}		
+				while (excited.flux_L > esmall || excited.flux_R < -esmall) {
+					cout << "Error: Excited is generated" << endl;
+					return -1;
+				}
+				while (ion.flux_L > esmall || ion.flux_R < -esmall) {
+					cout << "Error: Ion is generated" << endl;
+					return -1;
+				}
+
+
+			}
+				// Reset boundaries
 			ion.flux_L = 0.0;
 			ion.flux_R = 0.0;		
 			electron.flux_L = 0.0;
@@ -1256,6 +1367,31 @@ int main(int argc, char **argv)
 			for (int i = 0; i < n_cell; ++i) {
 				neutral.n_dot[i] = 0.0;
 				excited.n_dot[i] = 0.0;
+			}
+			
+			/*	
+			// Adjust ions based on total mass change			
+			mass_change = n_tot_domain - n_tot_domain_prime;
+			N_accel = mass_change/n_i_tot + 1.0;
+			
+			ion.spwt = N_accel*ion.spwt;
+			electron.spwt = N_accel*electron.spwt;
+			*/
+
+			// Gather current total mass
+			n_tot_domain_prime = 0;
+			for (int i = 0; i < n_cell; ++i) {
+				n_tot_domain_prime 	+= ion.n[i] + excited.n[i] + neutral.n[i];
+			}
+
+			// Adjust densities to match target total mass
+			N_accel = n_tot_domain/n_tot_domain_prime;
+			
+			ion.spwt = N_accel*ion.spwt;
+			electron.spwt = N_accel*electron.spwt;
+			for (int i = 0; i < n_cell; ++i) {
+				excited.n[i] *= N_accel;
+				neutral.n[i] *= N_accel;
 			}
 		}
 
@@ -1475,6 +1611,7 @@ int main(int argc, char **argv)
 		// Display end of iteration
 		auto stop_total = steady_clock::now();
 		auto duration_total = duration_cast<minutes>(stop_total-start_total);
+		
 		if(mpi_rank == 0) {
 			cout << "End of iteration" << endl;
 			cout << "Mass conservation check: vol average density " << dn_tot << endl;
@@ -1487,10 +1624,12 @@ int main(int argc, char **argv)
 			// Total particles
 			MPI_Reduce(&electron.np, &electron.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 			MPI_Reduce(&ion.np, &ion.np_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-			
+			MPI_Reduce(&SEE_count, &SEE_count_global, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+			MPI_Reduce(&SEE_count_total, &SEE_count_total_global, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 			if(mpi_rank == 0) {
 			cout << "electron.np = " << electron.np_total << endl;
 			cout << "ion.np = " << ion.np_total << endl;
+			cout << "SEE = " << (double) SEE_count_global/((double) SEE_count_total_global) << endl;
 			}
 
 			neutral.n_bar = 0.0;
@@ -1565,7 +1704,7 @@ int main(int argc, char **argv)
 			}
 		}
 		///////////////////// Steady State output //////////////////////////////////////////////
-		if (iter > ts) {
+		if (iter > ts && iter <= ts+ts_ss) {
 			if(mpi_rank == 0) {
 			cout << "Diagnostic calculations" << endl;
 			}
@@ -1609,22 +1748,23 @@ int main(int argc, char **argv)
 	MPI_Allreduce(MPI_IN_PLACE, ion.ux, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	MPI_Allreduce(MPI_IN_PLACE, ion.uy, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	MPI_Allreduce(MPI_IN_PLACE, ion.uz, n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	
+
+	MPI_Allreduce(MPI_IN_PLACE, reaction_rates, 8*n_cell, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);	
 	// Normalize by density and number of time steps averaged from 
 	for (int i = 0; i < n_cell; ++i) {
 		if (electron.n_ss[i] > 1.0) {
-			electron.n_ss[i] /= ts_ss;
-			electron.ux[i] /= electron.n_ss[i]*ts_ss;
-			electron.uy[i] /= electron.n_ss[i]*ts_ss;
-			electron.uz[i] /= electron.n_ss[i]*ts_ss;
-			electron.mean_epsilon[i] /= electron.n_ss[i]*ts_ss;
+			electron.n_ss[i] /= (double) ts_ss;
+			electron.ux[i] /= electron.n_ss[i]*((double) ts_ss);
+			electron.uy[i] /= electron.n_ss[i]*((double) ts_ss);
+			electron.uz[i] /= electron.n_ss[i]*((double) ts_ss);
+			electron.mean_epsilon[i] /= electron.n_ss[i]*((double) ts_ss);
 		}
 		if (ion.n_ss[i] > 1.0) {
-			ion.n_ss[i] /= ts_ss;
-			ion.ux[i] /= ion.n_ss[i]*ts_ss;
-			ion.uy[i] /= ion.n_ss[i]*ts_ss;
-			ion.uz[i] /= ion.n_ss[i]*ts_ss;
-			ion.mean_epsilon[i] /= ion.n_ss[i]*ts_ss;
+			ion.n_ss[i] /= (double) ts_ss;
+			ion.ux[i] /= ion.n_ss[i]*((double) ts_ss);
+			ion.uy[i] /= ion.n_ss[i]*((double) ts_ss);
+			ion.uz[i] /= ion.n_ss[i]*((double) ts_ss);
+			ion.mean_epsilon[i] /= ion.n_ss[i]*((double) ts_ss);
 		}
 		electron.fieldT[i] = (2.0/3.0)*(electron.mean_epsilon[i] - 0.5*electron.m/(ech)*(
 			 pow(getv(electron.ux[i], electron.uy[i], electron.uz[i]), 2.0)));
@@ -1638,7 +1778,17 @@ int main(int argc, char **argv)
 			IonDiagFile << ion.uy[i] << " " << ion.uz[i] << " " << ion.mean_epsilon[i] << " " << ion.fieldT[i] << endl;
 		}
 	}
-	
+
+	if (mpi_rank == 0) {
+		for (int i = 0; i < n_cell; ++i) {
+			for (int j = 0; j < 8; ++j) {
+				reaction_rates[j*n_cell + i] /= (double) ts_ss;
+				ReactionRateFile << reaction_rates[j*n_cell + i] << " ";
+			}
+			ReactionRateFile << endl;
+		}
+	}
+
 	// Clean up
 	delete[]elec_range;
 	delete[]CS_energy;
@@ -1650,6 +1800,7 @@ int main(int argc, char **argv)
 	delete[]RHS;
 	delete[]E_field;
 	delete[]phi;
+	delete[]reaction_rates;
 
 	electron.clean();
 	ion.clean();

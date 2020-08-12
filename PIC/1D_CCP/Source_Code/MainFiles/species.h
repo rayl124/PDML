@@ -14,7 +14,7 @@ class particles {
     double *gamma; // scattering coefficients,
     		   // 0 is reflection, 1 is secondary electron emission
     double *E;
-
+	double *v_max; // Max possible velocity
     // Keeps track of global nodes the particle is between
     int *node_index;
     // Keeps track of cell center the particle is between;
@@ -132,7 +132,13 @@ void particles::thermalVelocity(int index) {
 }
 
 void particles::injectionVelocity(int index) {
-  thermalBiasVelSample(&vx[index], &vy[index], &vz[index], T, m);
+  double injectionT = 3.0; // eV
+  vx[index] = sqrt(2.0*injectionT*1.602e-19/m);
+  vy[index] = 0.0;
+  vz[index] = 0.0;
+  //convert injectionT to T: T*ech/k_B
+  //injectionT = 1.602e-19*injectionT/(1.381e-23);
+  //thermalBiasVelSample(&vx[index], &vy[index], &vz[index], injectionT, m);
 }
 
 void particles::getDiagnosticsLocal(double *weights, int index, double dx)
@@ -188,7 +194,7 @@ void fluid::initialize(int n_cell) {
 
   for (int i = 0; i < n_cell; ++i) {
     n_ss[i] = 0.0;
-	n_dot = 0.0;
+	n_dot[i] = 0.0;
   }
 }
 
